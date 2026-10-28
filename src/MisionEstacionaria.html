@@ -1,0 +1,720 @@
+<style>
+  /* =================================================================
+   * Misión «Vigilante fijo»: cámara orbital sobre el polo y órbita estacionaria
+   * (reutiliza los paneles del observatorio de «Cazador de exoplanetas»)
+   * ================================================================= */
+  .camara-orbital { position: absolute; inset: 14px; z-index: 1; display: grid; grid-template-columns: minmax(0, 1fr) 190px; gap: 10px; }
+  .cam-controles { flex: none; display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-top: 1px solid var(--hud-linea); }
+  .cam-controles button { min-width: 30px; height: 26px; padding: 0 8px; border: 1px solid var(--hud-linea-fuerte); background: rgba(255,255,255,0.04); color: var(--hud-blanco); cursor: pointer;
+    font: 600 11px 'Chakra Petch', sans-serif; letter-spacing: 0.1em; text-transform: uppercase; }
+  .cam-controles button:hover { border-color: var(--hud-cian); color: var(--hud-cian); }
+  .cam-controles button { display: grid; place-items: center; }
+  .cam-controles button svg { width: 14px; height: 14px; fill: currentColor; }
+  .cam-controles [data-ayuda] { cursor: pointer; text-decoration: none; }
+  .cam-controles .cam-play { min-width: 40px; border-color: var(--hud-cian); color: var(--hud-cian); }
+  .cam-controles .cam-play svg { width: 16px; height: 16px; }
+  .cam-separador { width: 1px; align-self: stretch; margin: 2px 6px; background: var(--hud-linea-fuerte); }
+  .cam-controles button.activo { background: var(--hud-cian); color: #04121a; border-color: var(--hud-cian); }
+  .cam-linea { position: relative; flex: 1; height: 26px; }
+  .consola-vista .cam-linea canvas { position: absolute; inset: 0; width: 100%; height: 100%; cursor: pointer; outline: none; }
+  .cam-marcar { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 4px 0 6px; }
+  .cam-marcar button { height: 30px; border: 1px solid var(--hud-ambar); background: rgba(255,185,46,0.08); color: var(--hud-ambar); cursor: pointer;
+    font: 700 10.5px 'Chakra Petch', sans-serif; letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; padding: 0 4px; }
+  .cam-marcar button:hover { background: rgba(255,185,46,0.22); }
+  .cam-borrar { width: 100%; height: 26px; margin-top: 6px; border: 1px solid var(--hud-linea-fuerte); background: transparent; color: rgba(220,235,255,0.7); cursor: pointer;
+    font: 600 10.5px 'Chakra Petch', sans-serif; letter-spacing: 0.14em; text-transform: uppercase; }
+  @media (max-width: 860px) {
+    .consola-vista.con-camara { min-height: 720px; }
+    .camara-orbital { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) auto; }
+  }
+</style>
+<script>
+/* =====================================================================
+ * Misión «Vigilante fijo»: el alumno mide el periodo de rotación de un planeta
+ * en la cámara orbital y calcula la altura de la órbita estacionaria.
+ * ===================================================================== */
+
+/** Tiempo en horas y minutos («13 h 24 min»). */
+function horasMin(h) {
+  const total = Math.round(h * 60);
+  return `${Math.floor(total / 60)} h ${String(total % 60).padStart(2, '0')} min`;
+}
+
+function pantallaEstacionaria(m) {
+  limpiarVista();
+  E.mision = m;
+  document.body.classList.add('vista-consola');
+  const s = m.escena;
+  const claveP = 'prediccion-' + m.id;
+  let prediccion = null;
+  try { prediccion = sessionStorage.getItem(claveP); } catch (e) { /* sin almacenamiento */ }
+
+  app.innerHTML = `
+    <section class="consola">
+      <header class="consola-cab">
+        <span class="consola-icono">${iconoMision(m)}</span>
+        <div>
+          <div class="consola-kicker">MSN-${m.id} · Comunicaciones · ${esc(s.planeta)}</div>
+          <h1>${esc(m.titulo)}</h1>
+        </div>
+        <span class="dificultad">${dificultad(m.estrellas)}</span>
+        <span class="en-curso">🔒 Misión en curso · no se puede abandonar</span>
+      </header>
+      <div class="consola-cuerpo">
+        <div class="consola-vista con-camara" id="vista">
+          <div class="vista-hud vista-telemetria" id="telemetria" hidden></div>
+          <div class="vista-hud vista-fase" id="hud-fase" hidden><div class="fase" id="fase"></div><div class="hud-nombre">${esc(s.colonia)} · ${esc(s.planeta)}</div></div>
+          <div class="vista-hud vista-mensaje" id="mensaje"></div>
+        </div>
+        <aside class="consola-lateral" id="lateral">
+          <div class="bloque-hud orden">
+            <div class="bloque-hud-tit">Orden de Control de Misión</div>
+            <p>${esc(m.historia)}</p>
+            <div class="datos-exo">
+              <div class="hud-dato">MASA DEL PLANETA <b>${formatoNum(s.M)} kg</b></div>
+              <div class="hud-dato">G <b>${formatoNum(s.G)} N·m²/kg²</b></div>
+            </div>
+          </div>
+          <div class="bloque-hud paso-hud">
+            <div class="bloque-hud-tit"><span>01</span> Predicción</div>
+            <p class="orden" style="margin:0 0 8px;font-size:14px;color:rgba(225,235,255,.85)">Si el planeta girara más deprisa, la órbita estacionaria estaría…</p>
+            <div class="predicciones">
+              <button type="button" class="prediccion" data-p="mayor">Más alta</button>
+              <button type="button" class="prediccion" data-p="igual">A la misma altura</button>
+              <button type="button" class="prediccion" data-p="menor">Más baja</button>
+            </div>
+            <p class="paso-nota">No puntúa: lo comprobarás al final.</p>
+          </div>
+          <div class="bloque-hud paso-hud" id="paso-maniobra">
+            <div class="bloque-hud-tit"><span>02</span> Altura de la órbita</div>
+            <div class="maniobra-entrada">
+              <span class="simbolo">h =</span>
+              <input class="in-mantisa" id="m0" inputmode="decimal" placeholder="mantisa" aria-label="Mantisa">
+              <span class="por-diez">·10^</span>
+              <input class="in-exp" id="e0" inputmode="numeric" placeholder="exp" aria-label="Exponente">
+              <span class="unidad">km</span>
+            </div>
+            <div class="maniobra-previa" id="previa">Altura sobre la superficie a la que se colocará el satélite.</div>
+            <button id="btn-ejecutar" class="btn-hud btn-mantener" type="button" aria-label="Mantén pulsado para colocar el satélite">
+              <span class="relleno"></span>
+              <svg class="icono" viewBox="0 0 20 20" aria-hidden="true"><polygon points="10,1 19,10 10,19 1,10" fill="none" stroke="currentColor" stroke-width="2"/><polygon points="10,6 14,10 10,14 6,10" fill="currentColor"/></svg>
+              <span class="txt">Mantén para colocar</span>
+            </button>
+          </div>
+        </aside>
+      </div>
+    </section>`;
+
+  E.sim = crearCamaraOrbital($('#vista'), s);
+
+  // predicción
+  const pasoManiobra = $('#paso-maniobra');
+  const marcarPred = () => {
+    app.querySelectorAll('.prediccion').forEach(b => b.classList.toggle('activa', b.dataset.p === prediccion));
+    pasoManiobra.classList.toggle('bloqueado', !prediccion);
+  };
+  app.querySelectorAll('.prediccion').forEach(b => b.addEventListener('click', () => {
+    prediccion = b.dataset.p;
+    try { sessionStorage.setItem(claveP, prediccion); } catch (e) { /* sin almacenamiento */ }
+    marcarPred();
+  }));
+  marcarPred();
+
+  // vista previa del número
+  const previa = $('#previa');
+  const textoPrevia = 'Altura sobre la superficie a la que se colocará el satélite.';
+  const actualizarPrevia = () => {
+    const v = leerNumeroCliente($('#m0').value, $('#e0').value);
+    if (!$('#m0').value.trim() && !$('#e0').value.trim()) { previa.textContent = textoPrevia; previa.classList.remove('error'); return null; }
+    if (v === null) { previa.textContent = 'Formato no válido'; previa.classList.add('error'); return null; }
+    previa.classList.remove('error');
+    previa.textContent = 'h = ' + formatoNum(v, 4) + ' km';
+    return v;
+  };
+  ['#m0', '#e0'].forEach(sel => $(sel).addEventListener('input', actualizarPrevia));
+
+  // colocar (mantener pulsado): entrega, simulación e informe
+  const boton = $('#btn-ejecutar'), txt = boton.querySelector('.txt');
+  const mantener = botonMantener(boton, 900, async () => {
+    const valor = actualizarPrevia();
+    if (valor === null) {
+      aviso('Escribe la altura en notación científica antes de colocar el satélite.');
+      mantener.reiniciar();
+      return;
+    }
+    txt.textContent = 'Transmitiendo…';
+    E.estrellasAntes = E.inicio.estrellas;
+    let res;
+    try {
+      res = await llamar('entregarMision', m.id, [{ m: $('#m0').value.trim(), e: $('#e0').value.trim() }], { prediccion: prediccion });
+    } catch (err) {
+      aviso(mensajeError(err));
+      txt.textContent = 'Mantén para colocar';
+      mantener.reiniciar();
+      return;
+    }
+    try { sessionStorage.removeItem(claveP); } catch (e) { /* sin almacenamiento */ }
+    E.inicio = res.inicio;
+    pintarBarra();
+    $('.en-curso').textContent = '⏳ Colocando el satélite';
+    mostrarEjecucion(`Altura de la órbita <b>${formatoNum(valor, 4)} km</b>`,
+      [['insercion', 'Inserción en órbita'], ['seguimiento', 'Seguimiento de 3 rotaciones'], ['evaluacion', 'Evaluación del enlace']], 'Colocando el satélite');
+    const a0 = s.angulos[0] / 10;
+    E.sim.destruir();
+    $('#vista').classList.remove('con-camara');
+    E.sim = crearSimEstacionaria($('#vista'), {
+      R: res.extra.R, GM: res.extra.GM, Th: res.extra.Th, hAl: valor * 1000, angulo0: a0, rasgos: rasgosPolo(s.planeta), estrellas: res.estrellas, alFase: faseEjecucion
+    });
+    E.sim.ejecutar(resultadoSim => informeEstacionaria(m, res, valor, resultadoSim));
+  }, () => {
+    txt.textContent = 'Mantén pulsado…';
+    clearTimeout(boton._t);
+    boton._t = setTimeout(() => { txt.textContent = 'Mantén para colocar'; }, 1400);
+  });
+}
+
+function informeEstacionaria(m, res, valor, resultadoSim) {
+  const s = m.escena, x = res.extra;
+  $('.consola-cuerpo').classList.add('resultado');
+  const lateral = $('#lateral');
+  const estrellas = Array.from({ length: m.estrellas }, (_, i) =>
+    `<span style="animation-delay:${0.15 + i * 0.25}s" class="${i < res.estrellas ? '' : 'apagada'}">★</span>`).join('');
+  // altura si el planeta girara el doble de rápido: r se divide entre 2^(2/3)
+  const hRapido = (x.r / Math.pow(2, 2 / 3) - x.R) / 1000;
+  const textosPred = { mayor: 'más alta', igual: 'a la misma altura', menor: 'más baja' };
+  const pred = res.prediccion
+    ? `<p class="informe-pred">Predijiste que, girando más deprisa, la órbita estacionaria estaría <b class="${res.prediccion === 'menor' ? 'ok' : 'mal'}">${textosPred[res.prediccion]}</b>.
+        ${res.prediccion === 'menor' ? '¡Correcto!' : 'En realidad estaría más baja.'}
+        Como \\(r^3 \\propto T^2\\), un periodo más corto exige una órbita más pequeña: girando el doble de rápido, el satélite tendría que estar a ${formatoNum(hRapido, 4)} km en lugar de ${formatoNum(res.sol, 4)} km.</p>`
+    : '';
+  const titulo = res.estrellas === m.estrellas ? 'Enlace permanente' : res.estrellas > 0 ? 'Enlace inestable' : 'Satélite perdido';
+
+  lateral.classList.remove('ejecutando');
+  lateral.classList.add('informe');
+  lateral.innerHTML = `
+    <div class="bloque-hud">
+      <div class="bloque-hud-tit">Informe de misión</div>
+      ${resultadoSim ? `<div class="informe-sim ${resultadoSim.ok ? 'ok' : 'mal'}">${esc(resultadoSim.texto)}</div>` : ''}
+      <div class="informe-estrellas">${estrellas}</div>
+      <div class="informe-resumen">${titulo} · ${res.estrellas} de ${m.estrellas} ★</div>
+    </div>
+    <div class="bloque-hud">
+      <div class="bloque-hud-tit">Altura de la órbita</div>
+      <table class="informe-tabla">
+        <tr><td>Tu altura</td><td>${formatoNum(valor, 4)} km</td></tr>
+        <tr><td>Altura correcta</td><td>${formatoNum(res.sol, 4)} km</td></tr>
+        <tr><td>Error relativo</td><td>${res.error === null ? 'signo incorrecto' : res.error < 0.0001 ? '< 0,01 %' : formatoNum(res.error * 100, 3) + ' %'}</td></tr>
+      </table>
+      <div class="informe-escala">${textoEscala(m.estrellas)}</div>
+    </div>
+    ${res.pista ? `<div class="informe-pista"><b>Diagnóstico</b>${esc(res.pista)}</div>` : ''}
+    <div class="bloque-hud">
+      <div class="bloque-hud-tit">Valores reales</div>
+      <table class="informe-tabla">
+        <tr><td>Periodo de rotación</td><td>${horasMin(x.Th)} · ${formatoNum(x.Th * 3600, 5)} s</td></tr>
+        <tr><td>Radio del planeta</td><td>${formatoNum(x.R, 4)} m</td></tr>
+        <tr><td>Radio de la órbita</td><td>${formatoNum(x.r, 4)} m</td></tr>
+      </table>
+      <div class="informe-escala">Compáralos con tus medidas.</div>
+    </div>
+    ${pred ? `<div class="bloque-hud"><div class="bloque-hud-tit">Tu predicción</div>${pred}</div>` : ''}
+    <div class="bloque-hud">
+      <div class="bloque-hud-tit">Resolución</div>
+      <ol class="pasos">${res.pasos.map(p => `<li>${p}</li>`).join('')}</ol>
+    </div>
+    <button id="btn-volver" class="btn-hud principal" type="button">Volver al registro de misiones</button>`;
+  renderMates(lateral);
+  lateral.scrollTop = 0;
+  $('.en-curso').textContent = '✓ Misión completada';
+  $('#btn-volver').addEventListener('click', pantallaPanel);
+  celebrar(E.estrellasAntes, res.inicio.estrellas, res.inicio.objetivo);
+}
+
+/* -------------------- Planeta visto desde el polo -------------------- */
+
+/** Semilla del planeta a partir de su nombre (las texturas se generan al primer dibujo y se guardan aquí). */
+function rasgosPolo(nombre) {
+  let h = 2166136261;
+  for (const ch of nombre) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+  return { semilla: h >>> 0, tex: null };
+}
+
+/** Ruido de valor 3D (suave y periódico en 256) con una permutación sembrada. */
+function ruido3D(semilla) {
+  const p = new Uint8Array(512);
+  let h = semilla || 1;
+  const azar = () => { h = Math.imul(h ^ (h >>> 15), 2246822507); h = Math.imul(h ^ (h >>> 13), 3266489909); h ^= h >>> 16; return (h >>> 0) / 4294967296; };
+  for (let i = 0; i < 256; i++) p[i] = i;
+  for (let i = 255; i > 0; i--) { const j = Math.floor(azar() * (i + 1)); const t = p[i]; p[i] = p[j]; p[j] = t; }
+  for (let i = 0; i < 256; i++) p[i + 256] = p[i];
+  const v = (x, y, z) => p[p[p[x & 255] + (y & 255)] + (z & 255)] / 255;
+  const s5 = t => t * t * t * (t * (t * 6 - 15) + 10);
+  return (x, y, z) => {
+    const X = Math.floor(x), Y = Math.floor(y), Z = Math.floor(z);
+    const fx = s5(x - X), fy = s5(y - Y), fz = s5(z - Z);
+    const l = (a, b, t) => a + (b - a) * t;
+    return l(
+      l(l(v(X, Y, Z), v(X + 1, Y, Z), fx), l(v(X, Y + 1, Z), v(X + 1, Y + 1, Z), fx), fy),
+      l(l(v(X, Y, Z + 1), v(X + 1, Y, Z + 1), fx), l(v(X, Y + 1, Z + 1), v(X + 1, Y + 1, Z + 1), fx), fy), fz);
+  };
+}
+
+/**
+ * Texturas del planeta en proyección ortográfica desde el polo norte (se giran tal cual al rotar el planeta):
+ * superficie (relieve, mares, desiertos, hielo), nubes y luces nocturnas; más la sombra fija de la iluminación.
+ */
+function texturasPolo(r) {
+  if (r.tex) return r.tex;
+  const N = 560, c = N / 2;
+  const ruido = ruido3D(r.semilla), ruidoN = ruido3D(r.semilla ^ 0x9e3779b9), ruidoH = ruido3D(r.semilla ^ 0x51ed27);
+  const fbm = (fn, x, y, z, oct) => { let a = 0.5, f = 1, t = 0, n = 0; for (let i = 0; i < oct; i++) { t += a * fn(x * f + 17, y * f + 31, z * f + 47); n += a; a *= 0.5; f *= 2.03; } return t / n; };
+  const lienzo = () => { const k = document.createElement('canvas'); k.width = k.height = N; return k; };
+  const sup = lienzo(), nub = lienzo(), luz = lienzo(), som = lienzo();
+  const dS = sup.getContext('2d').createImageData(N, N), dN = nub.getContext('2d').createImageData(N, N);
+  const dL = luz.getContext('2d').createImageData(N, N), dO = som.getContext('2d').createImageData(N, N);
+  const noc = lienzo(), dX = noc.getContext('2d').createImageData(N, N);
+  const mezcla = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+  const suave = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  const MAR = 0.53;
+  // la estrella ilumina desde la izquierda y algo por encima del ecuador (se ve iluminado el polo)
+  const L = [-0.86, 0.2, 0.45], nL = Math.hypot(L[0], L[1], L[2]);
+  for (let py = 0; py < N; py++) {
+    for (let px = 0; px < N; px++) {
+      const u = (px + 0.5 - c) / c, v = (c - py - 0.5) / c, d2 = u * u + v * v;
+      const i = (py * N + px) * 4;
+      if (d2 > 1) continue;
+      const z = Math.sqrt(1 - d2);                        // z = 1 en el polo, 0 en el ecuador (borde)
+      // relieve (con una isla garantizada donde está la colonia: ecuador, ángulo 0)
+      const col = Math.exp(-((u - 1) * (u - 1) + v * v + z * z) / 0.03);
+      const e = fbm(ruido, u * 1.7, v * 1.7, z * 1.7, 6) + 0.18 * col;
+      const humedad = fbm(ruidoH, u * 2.2, v * 2.2, z * 2.2, 3);
+      const borde = 0.9 + 0.1 * fbm(ruidoH, u * 6, v * 6, z * 6, 2);
+      let rgb;
+      if (e < MAR) {
+        const prof = suave(0, 0.12, MAR - e);
+        rgb = mezcla([38, 122, 150], [9, 34, 70], prof);
+      } else {
+        const a = (e - MAR) / (1 - MAR);
+        if (a < 0.03) rgb = [196, 182, 138];                                   // costa
+        else if (a < 0.3) rgb = mezcla([62, 120, 58], [88, 128, 62], a / 0.3); // llanura
+        else if (a < 0.55) rgb = mezcla([104, 112, 66], [124, 102, 74], (a - 0.3) / 0.25);
+        else if (a < 0.72) rgb = mezcla([128, 116, 104], [150, 144, 138], (a - 0.55) / 0.17);
+        else rgb = [236, 240, 245];                                            // nieve en las cumbres
+        // desiertos en latitudes bajas y secas (cerca del borde)
+        if (a < 0.55 && a >= 0.03) rgb = mezcla(rgb, [196, 160, 102], suave(0.45, 0.25, humedad) * suave(0.45, 0.15, z));
+      }
+      // casquete polar de borde irregular
+      const hielo = suave(0.94, 0.962, z + 0.3 * (borde - 0.95) + 0.03 * (e - 0.5));   // radio ≈ 0,3 del disco
+      rgb = mezcla(rgb, [238, 245, 252], hielo);
+      dS.data[i] = rgb[0]; dS.data[i + 1] = rgb[1]; dS.data[i + 2] = rgb[2]; dS.data[i + 3] = 255;
+      // nubes: bandas algo estiradas en longitud
+      const n = fbm(ruidoN, u * 2.6, v * 2.6, z * 5.2, 5);
+      const an = suave(0.54, 0.74, n) * 0.85 * (1 - 0.5 * suave(0.9, 1, z));
+      dN.data[i] = dN.data[i + 1] = dN.data[i + 2] = 255; dN.data[i + 3] = an * 255;
+      // luces de ciudades: tierras bajas, dispersas; la colonia, más brillante
+      if (e >= MAR && (e - MAR) / (1 - MAR) < 0.35 && hielo < 0.5) {
+        const pr = ruidoH(u * 60, v * 60, z * 60);
+        const brillo = Math.max(0, pr - 0.8) * 5 + col * 0.9;
+        if (brillo > 0.05) { dL.data[i] = 255; dL.data[i + 1] = 205; dL.data[i + 2] = 120; dL.data[i + 3] = Math.min(1, brillo) * 255; }
+      }
+      // sombra fija: Lambert con terminador suave y un poco de luz ambiente
+      const I = (u * L[0] + v * L[1] + z * L[2]) / nL;
+      const dia = suave(-0.08, 0.35, I);
+      dO.data[i] = 2; dO.data[i + 1] = 5; dO.data[i + 2] = 14; dO.data[i + 3] = (1 - (0.08 + 0.92 * dia)) * 255;
+      dX.data[i + 3] = Math.pow(1 - dia, 3) * 255;                   // noche cerrada (para las luces)
+    }
+  }
+  sup.getContext('2d').putImageData(dS, 0, 0); nub.getContext('2d').putImageData(dN, 0, 0);
+  luz.getContext('2d').putImageData(dL, 0, 0); som.getContext('2d').putImageData(dO, 0, 0); noc.getContext('2d').putImageData(dX, 0, 0);
+  const tmp = lienzo();
+  r.tex = { sup: sup, nub: nub, luz: luz, som: som, noc: noc, tmp: tmp, N: N };
+  return r.tex;
+}
+
+/**
+ * Planeta visto desde el polo norte, girado «giro» radianes (sentido antihorario).
+ * «deriva» desplaza las nubes respecto a la superficie (radianes).
+ */
+function dibujarPolo(ctx, cx, cy, rad, giro, rasgos, deriva) {
+  const t = texturasPolo(rasgos);
+  // halo de la atmósfera, más intenso en el lado iluminado
+  const halo = ctx.createRadialGradient(cx, cy, rad * 0.96, cx, cy, rad * 1.16);
+  halo.addColorStop(0, 'rgba(110,185,255,0.42)'); halo.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = halo; ctx.beginPath(); ctx.arc(cx, cy, rad * 1.16, 0, Math.PI * 2); ctx.fill();
+  ctx.save();
+  ctx.beginPath(); ctx.arc(cx, cy, rad, 0, Math.PI * 2); ctx.clip();
+  // superficie y nubes, girando con el planeta
+  ctx.save(); ctx.translate(cx, cy); ctx.rotate(-giro);
+  ctx.drawImage(t.sup, -rad, -rad, rad * 2, rad * 2);
+  ctx.rotate(-(deriva || 0));
+  ctx.drawImage(t.nub, -rad, -rad, rad * 2, rad * 2);
+  ctx.restore();
+  // sombra fija (la estrella no gira con el planeta)
+  ctx.drawImage(t.som, cx - rad, cy - rad, rad * 2, rad * 2);
+  // luces nocturnas: solo donde es de noche
+  const tc = t.tmp.getContext('2d'), N = t.N;
+  tc.globalCompositeOperation = 'source-over'; tc.clearRect(0, 0, N, N);
+  tc.save(); tc.translate(N / 2, N / 2); tc.rotate(-giro); tc.drawImage(t.luz, -N / 2, -N / 2); tc.restore();
+  tc.globalCompositeOperation = 'destination-in'; tc.drawImage(t.noc, 0, 0);
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.drawImage(t.tmp, cx - rad, cy - rad, rad * 2, rad * 2);
+  ctx.globalCompositeOperation = 'source-over';
+  // bruma azulada en el limbo
+  const limbo = ctx.createRadialGradient(cx, cy, rad * 0.82, cx, cy, rad);
+  limbo.addColorStop(0, 'rgba(120,190,255,0)'); limbo.addColorStop(1, 'rgba(120,190,255,0.32)');
+  ctx.fillStyle = limbo; ctx.fillRect(cx - rad, cy - rad, rad * 2, rad * 2);
+  ctx.restore();
+  // borde fino de estilo HUD
+  ctx.strokeStyle = 'rgba(140,200,255,0.35)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(cx, cy, rad + 0.5, 0, Math.PI * 2); ctx.stroke();
+}
+
+/** Baliza de la colonia en el ecuador (borde del disco). */
+function dibujarColonia(ctx, cx, cy, rad, ang, t) {
+  const x = cx + Math.cos(ang) * rad * 0.94, y = cy - Math.sin(ang) * rad * 0.94;
+  const pulso = 0.6 + 0.4 * Math.sin(t * 6);
+  const g = ctx.createRadialGradient(x, y, 0, x, y, 12);
+  g.addColorStop(0, `rgba(255,220,120,${pulso})`); g.addColorStop(1, 'rgba(255,185,46,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, 12, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#fff3c4'; ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fill();
+  return [x, y];
+}
+
+/* --------------------------- Cámara orbital --------------------------- */
+
+// Iconos de los controles de reproducción (20 × 20, relleno con el color del texto)
+const ICONOS_CAMARA = (() => {
+  const svg = d => '<svg viewBox="0 0 20 20" aria-hidden="true">' + d + '</svg>';
+  const izq = x => `<polygon points="${x},4 ${x - 7},10 ${x},16"/>`, der = x => `<polygon points="${x},4 ${x + 7},10 ${x},16"/>`;
+  return {
+    play: svg('<polygon points="6,3 16,10 6,17"/>'),
+    pausa: svg('<rect x="5" y="4" width="3.5" height="12"/><rect x="11.5" y="4" width="3.5" height="12"/>'),
+    primero: svg('<rect x="2.5" y="4" width="2" height="12"/>' + izq(11) + izq(18)),
+    atras: svg(izq(9.5) + izq(16.5)),
+    adelante: svg(der(3.5) + der(10.5)),
+    ultimo: svg(der(2) + der(9) + '<rect x="15.5" y="4" width="2" height="12"/>')
+  };
+})();
+
+/**
+ * Secuencia de imágenes del planeta (una cada pasoMin minutos) con barra de tiempo,
+ * reproducción, paso a paso y dos marcadores de tiempo.
+ */
+function crearCamaraOrbital(cont, s) {
+  const n = s.angulos.length, paso = s.pasoMin / 60;           // horas por imagen
+  const raiz = document.createElement('div');
+  raiz.className = 'camara-orbital';
+  raiz.innerHTML = `
+    <section class="obs-panel">
+      <header class="obs-cab">
+        <span class="obs-tit">Cámara orbital · vista desde el polo norte</span>
+        <span class="obs-ayuda">Una imagen cada ${s.pasoMin} min · Flechas: imagen a imagen</span>
+      </header>
+      <div class="lienzo-caja"><canvas id="lienzo-polo"></canvas></div>
+      <div class="cam-controles">
+        <button type="button" class="cam-play" data-acc="play" aria-label="Reproducir" data-ayuda="Reproducir">${ICONOS_CAMARA.play}</button>
+        <span class="cam-separador" aria-hidden="true"></span>
+        <button type="button" data-acc="primero" aria-label="Primera imagen" data-ayuda="Primera imagen">${ICONOS_CAMARA.primero}</button>
+        <button type="button" data-acc="atras" aria-label="Imagen anterior" data-ayuda="Imagen anterior">${ICONOS_CAMARA.atras}</button>
+        <button type="button" data-acc="adelante" aria-label="Imagen siguiente" data-ayuda="Imagen siguiente">${ICONOS_CAMARA.adelante}</button>
+        <button type="button" data-acc="ultimo" aria-label="Última imagen" data-ayuda="Última imagen">${ICONOS_CAMARA.ultimo}</button>
+        <div class="cam-linea"><canvas id="linea-tiempo" tabindex="0" aria-label="Línea de tiempo"></canvas></div>
+      </div>
+    </section>
+    <section class="obs-panel obs-lecturas">
+      <div class="lectura grande"><span>Tiempo de la imagen</span><b id="o-t">—</b></div>
+      <div class="cam-marcar">
+        <button type="button" data-marca="0">Marcar A</button>
+        <button type="button" data-marca="1">Marcar B</button>
+      </div>
+      <div class="lectura marca"><span>Marcador A</span><b id="o-a">—</b></div>
+      <div class="lectura marca"><span>Marcador B</span><b id="o-b">—</b></div>
+      <div class="lectura marca grande"><span>Δt = B − A</span><b id="o-dt">—</b></div>
+      <div class="lectura marca grande"><span>Arco A → B (superficie)</span><b id="o-arco">—</b></div>
+      <button type="button" class="cam-borrar" data-acc="borrar">Borrar marcas</button>
+    </section>`;
+  cont.insertBefore(raiz, cont.firstChild);
+
+  const lz = raiz.querySelector('#lienzo-polo'), lzL = raiz.querySelector('#linea-tiempo');
+  const ctx = lz.getContext('2d'), ctxL = lzL.getContext('2d');
+  const ajustarLienzo = (l, c) => {
+    const w = l.clientWidth, h = l.clientHeight, k = Math.min(window.devicePixelRatio || 1, 2);
+    if (l.width !== Math.round(w * k) || l.height !== Math.round(h * k)) { l.width = Math.round(w * k); l.height = Math.round(h * k); }
+    c.setTransform(k, 0, 0, k, 0, 0);
+    return [w, h];
+  };
+  const rasgos = rasgosPolo(s.planeta);
+  const fondo = Array.from({ length: 140 }, () => ({ x: Math.random(), y: Math.random(), r: Math.random() * 1.1 + 0.2, a: Math.random() * 0.6 + 0.2 }));
+  let k = 0;                                                   // imagen actual
+  const marcas = [null, null];
+  const grados = i => s.angulos[i] / 10;                      // giro del planeta en la imagen i
+  // cada marca queda en el punto del ecuador que estaba bajo la línea de referencia (90°) al marcar
+  const anguloCuerpo = i => 90 - grados(i);
+  // arco recorrido de la marca anterior a la posterior, en el sentido de giro (grados, 0–360)
+  const arcoGrados = () => {
+    if (marcas[0] === null || marcas[1] === null) return null;
+    const a = Math.min(marcas[0], marcas[1]), b = Math.max(marcas[0], marcas[1]);
+    return ((grados(b) - grados(a)) % 360 + 360) % 360;
+  };
+  const kmTexto = km => String(Math.round(km)).replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0') + ' km';
+  function dibujarMarcas(giro) {
+    const [W, H] = [lz.clientWidth, lz.clientHeight];
+    const cx = W / 2, cy = H / 2 + 8, rad = Math.min(W, H) * 0.36;
+    const g = arcoGrados();
+    if (g !== null && g > 0) {
+      const a = Math.min(marcas[0], marcas[1]);
+      const ini = (anguloCuerpo(a) + giro) * Math.PI / 180;     // ángulo en pantalla de la marca anterior
+      ctx.strokeStyle = 'rgba(255,185,46,0.9)'; ctx.lineWidth = 3;
+      // desde la marca anterior, en sentido horario sobre el cuerpo (el sentido en que pasó el giro)
+      ctx.beginPath(); ctx.arc(cx, cy, rad * 1.04, -ini, -ini + g * Math.PI / 180, false); ctx.stroke();
+      const medio = ini - g * Math.PI / 360;
+      ctx.font = '700 12px "Share Tech Mono", monospace'; ctx.fillStyle = '#ffb92e'; ctx.textAlign = 'center';
+      ctx.fillText(kmTexto(g * s.kmPorGrado), cx + Math.cos(medio) * rad * 1.2, cy - Math.sin(medio) * rad * 1.2 + 4);
+    }
+    marcas.forEach((mk, i) => {
+      if (mk === null) return;
+      const ang = (anguloCuerpo(mk) + giro) * Math.PI / 180;
+      const x = cx + Math.cos(ang) * rad * 1.04, y = cy - Math.sin(ang) * rad * 1.04;
+      ctx.save(); ctx.translate(x, y); ctx.rotate(-ang + Math.PI / 2);
+      ctx.fillStyle = '#ffb92e'; ctx.beginPath(); ctx.moveTo(0, 2); ctx.lineTo(-6, -9); ctx.lineTo(6, -9); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#1a1100'; ctx.font = '700 8px "Chakra Petch", sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText(i ? 'B' : 'A', 0, -3);
+      ctx.restore();
+    });
+  }
+
+  function pintar() {
+    const [W, H] = ajustarLienzo(lz, ctx);
+    ctx.clearRect(0, 0, W, H);
+    fondo.forEach(st => { ctx.globalAlpha = st.a; ctx.fillStyle = '#fff'; ctx.fillRect(st.x * W, st.y * H, st.r, st.r); });
+    ctx.globalAlpha = 1;
+    const cx = W / 2, cy = H / 2 + 8, rad = Math.min(W, H) * 0.36;
+    const ang = s.angulos[k] / 10 * Math.PI / 180;
+    // el giro del planeta acompaña a la colonia (ángulo inicial de la colonia como referencia del dibujo)
+    dibujarPolo(ctx, cx, cy, rad, ang, rasgos, k * paso * 0.03);         // las nubes derivan ~0,03 rad/h
+    // línea de referencia (hacia arriba)
+    ctx.save(); ctx.setLineDash([6, 5]); ctx.strokeStyle = 'rgba(255,61,127,0.8)'; ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx, cy - rad - 26); ctx.stroke(); ctx.restore();
+    ctx.font = '600 10.5px "Chakra Petch", sans-serif'; ctx.fillStyle = 'rgba(255,61,127,0.9)'; ctx.textAlign = 'center';
+    ctx.fillText('LÍNEA DE REFERENCIA', cx, cy - rad - 32);
+    dibujarMarcas(grados(k));                                 // giro en grados (ang está en radianes)
+    dibujarColonia(ctx, cx, cy, rad, ang, performance.now() / 1000);
+    // sentido de giro (antihorario visto desde el polo norte): flecha curva con rótulo
+    const rg = rad * 1.12, a1 = Math.PI * 0.42, a2 = Math.PI * 0.16;   // ángulos del lienzo (abajo a la derecha)
+    ctx.strokeStyle = 'rgba(63,224,255,0.75)'; ctx.fillStyle = 'rgba(63,224,255,0.75)'; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.arc(cx, cy, rg, a1, a2, true); ctx.stroke();
+    const px = cx + Math.cos(a2) * rg, py = cy + Math.sin(a2) * rg;
+    const tx = Math.sin(a2), ty = -Math.cos(a2);                       // tangente en el sentido del giro
+    ctx.beginPath(); ctx.moveTo(px + tx * 8, py + ty * 8);
+    ctx.lineTo(px - ty * 4.5, py + tx * 4.5); ctx.lineTo(px + ty * 4.5, py - tx * 4.5); ctx.closePath(); ctx.fill();
+    const am = (a1 + a2) / 2;
+    ctx.save(); ctx.translate(cx + Math.cos(am) * (rg + 12), cy + Math.sin(am) * (rg + 12)); ctx.rotate(am - Math.PI / 2);
+    ctx.font = '600 9.5px "Chakra Petch", sans-serif'; ctx.textAlign = 'center'; ctx.fillText('SENTIDO DE GIRO', 0, 3);
+    ctx.restore();
+    ctx.font = '12px "Share Tech Mono", monospace'; ctx.fillStyle = 'rgba(220,235,255,0.75)'; ctx.textAlign = 'left';
+    ctx.fillText('t = ' + horasMin(k * paso), 14, 22);
+    ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(63,224,255,0.75)';
+    ctx.fillText('IMAGEN ' + (k + 1) + ' / ' + n, W - 14, 22);
+    pintarLinea();
+  }
+
+  function pintarLinea() {
+    const [W, H] = ajustarLienzo(lzL, ctxL);
+    ctxL.clearRect(0, 0, W, H);
+    const X = i => 6 + i / (n - 1) * (W - 12);
+    ctxL.fillStyle = 'rgba(255,255,255,0.08)'; ctxL.fillRect(6, H / 2 - 3, W - 12, 6);
+    ctxL.strokeStyle = 'rgba(220,235,255,0.25)'; ctxL.lineWidth = 1;
+    for (let hh = 0; hh <= (n - 1) * paso; hh += 6) { const x = X(hh / paso); ctxL.beginPath(); ctxL.moveTo(x, H / 2 + 5); ctxL.lineTo(x, H / 2 + 9); ctxL.stroke(); }
+    marcas.forEach((mk, i) => {
+      if (mk === null) return;
+      const x = X(mk);
+      ctxL.fillStyle = '#ffb92e'; ctxL.fillRect(x - 1, 2, 2, H - 4);
+      ctxL.font = '700 9px "Chakra Petch", sans-serif'; ctxL.textAlign = 'center'; ctxL.fillText(i ? 'B' : 'A', x, 9);
+    });
+    const x = X(k);
+    ctxL.fillStyle = '#3fe0ff'; ctxL.beginPath(); ctxL.moveTo(x, H / 2 - 7); ctxL.lineTo(x + 6, H / 2); ctxL.lineTo(x, H / 2 + 7); ctxL.lineTo(x - 6, H / 2); ctxL.closePath(); ctxL.fill();
+  }
+
+  const ir = i => { k = Math.max(0, Math.min(n - 1, i)); pintar(); lecturas(); };
+  // arrastrar en la línea de tiempo
+  let arrastrando = false;
+  const desdeX = ev => { const r = lzL.getBoundingClientRect(); ir(Math.round((ev.clientX - r.left - 6) / (r.width - 12) * (n - 1))); };
+  lzL.addEventListener('pointerdown', ev => { arrastrando = true; lzL.setPointerCapture(ev.pointerId); lzL.focus(); desdeX(ev); });
+  lzL.addEventListener('pointermove', ev => { if (arrastrando) desdeX(ev); });
+  lzL.addEventListener('pointerup', () => { arrastrando = false; });
+  const teclas = ev => {
+    if ((ev.target.closest && ev.target.closest('input, textarea')) || !raiz.isConnected) return;
+    if (ev.key !== 'ArrowLeft' && ev.key !== 'ArrowRight') return;
+    ev.preventDefault();
+    ir(k + (ev.key === 'ArrowRight' ? 1 : -1) * (ev.shiftKey ? 10 : 1));
+  };
+  document.addEventListener('keydown', teclas);
+
+  // reproducción (unas 30 imágenes por segundo)
+  let play = false, raf = null, previo = 0, acum = 0;
+  const botonPlay = raiz.querySelector('[data-acc="play"]');
+  // pausa la reproducción; el bucle sigue vivo (pinta la baliza y retoma al volver a pulsar ▶)
+  const parar = () => { play = false; botonPlay.innerHTML = ICONOS_CAMARA.play; botonPlay.dataset.ayuda = 'Reproducir'; botonPlay.classList.remove('activo'); };
+  function bucle(ahora) {
+    if (!raiz.isConnected) return;
+    if (play) {
+      acum += (ahora - previo) / 1000 * 30; previo = ahora;
+      if (acum >= 1) { const d = Math.floor(acum); acum -= d; ir(k + d); if (k >= n - 1) parar(); }
+    } else pintar();                                           // la baliza parpadea también en pausa
+    raf = requestAnimationFrame(bucle);
+  }
+  raf = requestAnimationFrame(bucle);
+  raiz.querySelectorAll('[data-acc]').forEach(b => b.addEventListener('click', () => {
+    const a = b.dataset.acc;
+    if (a === 'atras') ir(k - 1);
+    else if (a === 'adelante') ir(k + 1);
+    else if (a === 'primero') ir(0);
+    else if (a === 'ultimo') ir(n - 1);
+    else if (a === 'borrar') { marcas[0] = marcas[1] = null; pintarLinea(); lecturas(); }
+    else if (a === 'play') {
+      if (play) { parar(); return; }
+      if (k >= n - 1) ir(0);
+      play = true; previo = performance.now(); acum = 0; botonPlay.innerHTML = ICONOS_CAMARA.pausa; botonPlay.dataset.ayuda = 'Pausa'; botonPlay.classList.add('activo');
+    }
+  }));
+  raiz.querySelectorAll('[data-marca]').forEach(b => b.addEventListener('click', () => { marcas[Number(b.dataset.marca)] = k; pintarLinea(); lecturas(); }));
+
+  function lecturas() {
+    const q = id => raiz.querySelector(id);
+    q('#o-t').textContent = horasMin(k * paso);
+    q('#o-a').textContent = marcas[0] === null ? '—' : horasMin(marcas[0] * paso);
+    q('#o-b').textContent = marcas[1] === null ? '—' : horasMin(marcas[1] * paso);
+    q('#o-dt').textContent = marcas[0] === null || marcas[1] === null ? '—' : (marcas[1] < marcas[0] ? '−' : '') + horasMin(Math.abs(marcas[1] - marcas[0]) * paso);
+    const g = arcoGrados();
+    q('#o-arco').textContent = g === null ? '—' : kmTexto(g * s.kmPorGrado);
+  }
+
+  const ro = new ResizeObserver(pintar);
+  ro.observe(lz); ro.observe(lzL);
+  pintar(); lecturas();
+
+  return { destruir() { parar(); cancelAnimationFrame(raf); document.removeEventListener('keydown', teclas); ro.disconnect(); raiz.remove(); } };
+}
+
+/* --------------------------- Simulador ---------------------------- */
+
+/**
+ * Vista desde el polo: el planeta gira con su periodo real y el satélite orbita a la altura
+ * del alumno. Se mide cuánto se desvía de la vertical de la colonia en 3 rotaciones.
+ */
+function crearSimEstacionaria(cont, p) {
+  const lienzo = document.createElement('canvas');
+  cont.insertBefore(lienzo, cont.firstChild);
+  const ctx = lienzo.getContext('2d');
+  let W = 0, H = 0;
+  const fondo = Array.from({ length: 150 }, () => ({ x: Math.random(), y: Math.random(), r: Math.random() * 1.1 + 0.2, a: Math.random() * 0.6 + 0.2 }));
+  const ajustar = () => {
+    const k = Math.min(window.devicePixelRatio || 1, 2);
+    W = cont.clientWidth; H = cont.clientHeight;
+    lienzo.width = W * k; lienzo.height = H * k;
+    ctx.setTransform(k, 0, 0, k, 0, 0);
+  };
+  const ro = new ResizeObserver(ajustar);
+  ro.observe(cont);
+  ajustar();
+
+  const tel = $('#telemetria'), elFase = $('#fase');
+  tel.hidden = false; $('#hud-fase').hidden = false;
+  const rAl = p.R + p.hAl;
+  const valida = p.hAl > 0;
+  const T = p.Th * 3600;
+  const rReal = Math.cbrt(p.GM * T * T / (4 * Math.PI * Math.PI));
+  const Tal = valida ? 2 * Math.PI * Math.sqrt(rAl * rAl * rAl / p.GM) : null;
+  const ROT = 3, DUR = 9;
+  let fase = 'espera', tFase = 0, tSim = 0, detenido = false, alFinal = null;
+  const nombres = { insercion: 'Inserción en órbita', seguimiento: 'Seguimiento de 3 rotaciones', evaluacion: 'Evaluación del enlace', abortada: 'Órbita imposible' };
+  const ponerFase = nf => { fase = nf; tFase = 0; elFase.textContent = nombres[nf]; if (p.alFase) p.alFase(nf, nombres[nf]); };
+  elFase.textContent = 'En espera';
+  const a0 = p.angulo0 * Math.PI / 180;
+  const grados = x => Math.round(x * 180 / Math.PI);
+  const desvio = () => valida ? 2 * Math.PI * tSim * (1 / Tal - 1 / T) : 0;     // rad (positivo: el satélite se adelanta)
+
+  function terminar() {
+    if (detenido) return;
+    detenido = true;
+    let texto, ok = false;
+    if (!valida) texto = 'Órbita imposible: el satélite quedaría dentro del planeta';
+    else {
+      const d = Math.abs(grados(2 * Math.PI * ROT * T * (1 / Tal - 1 / T)));
+      ok = p.estrellas > 0;
+      const cuanto = d >= 360 ? 'más de una vuelta' : d + '°';
+      texto = ok ? 'Enlace estable: el satélite sigue sobre la colonia (desvío de ' + cuanto + ' tras 3 rotaciones)'
+        : 'El satélite pierde la colonia: desvío de ' + cuanto + ' tras 3 rotaciones';
+    }
+    const msg = $('#mensaje');
+    msg.textContent = texto;
+    msg.className = 'vista-hud vista-mensaje ' + (ok ? 'ok' : 'mal');
+    if (alFinal) { const cb = alFinal; alFinal = null; setTimeout(() => cb({ texto: texto, ok: ok }), 900); }
+  }
+
+  function avanzar(dt) {
+    if (detenido || fase === 'espera') return;
+    tFase += dt;
+    if (fase === 'abortada') { if (tFase > 1.2) terminar(); return; }
+    if (fase === 'insercion') { if (tFase > 0.9) ponerFase('seguimiento'); return; }
+    if (fase === 'seguimiento') {
+      tSim = Math.min(ROT * T, tSim + dt * ROT * T / DUR);
+      if (tSim >= ROT * T) ponerFase('evaluacion');
+      return;
+    }
+    if (fase === 'evaluacion' && tFase > 1) terminar();
+  }
+
+  const rasgos = p.rasgos;
+  let vivo = true, previo = performance.now(), t = 0;
+  function bucle(ahora) {
+    if (!vivo) return;
+    const dt = Math.min(0.05, (ahora - previo) / 1000);
+    previo = ahora; t += dt;
+    avanzar(dt);
+    ctx.clearRect(0, 0, W, H);
+    fondo.forEach(st => { ctx.globalAlpha = st.a; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(st.x * W, st.y * H, st.r, 0, Math.PI * 2); ctx.fill(); });
+    ctx.globalAlpha = 1;
+    const cx = W / 2, cy = H / 2 + 6;
+    const rMax = Math.min(Math.max(rReal, valida ? rAl : 0), rReal * 2.5);
+    const esc_ = Math.min(W, H) * 0.42 / rMax;
+    const rad = p.R * esc_;
+    const angPlaneta = a0 + 2 * Math.PI * tSim / T;
+    dibujarPolo(ctx, cx, cy, rad, angPlaneta, rasgos, tSim / 3600 * 0.03);
+    // órbita estacionaria correcta (referencia) y órbita del alumno
+    ctx.save(); ctx.setLineDash([4, 6]); ctx.strokeStyle = 'rgba(126,226,168,0.45)';
+    ctx.beginPath(); ctx.arc(cx, cy, rReal * esc_, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+    const col = dibujarColonia(ctx, cx, cy, rad, angPlaneta, t);
+    if (valida && fase !== 'abortada') {
+      const rv = Math.min(rAl, rReal * 2.5) * esc_;
+      ctx.strokeStyle = 'rgba(255,185,46,0.5)'; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.arc(cx, cy, rv, 0, Math.PI * 2); ctx.stroke();
+      const angSat = a0 + (fase === 'espera' ? 0 : 2 * Math.PI * tSim / Tal);
+      const sx = cx + Math.cos(angSat) * rv, sy = cy - Math.sin(angSat) * rv;
+      // enlace: verde si el satélite está casi en la vertical de la colonia
+      let d = desvio() % (2 * Math.PI); if (d > Math.PI) d -= 2 * Math.PI; if (d < -Math.PI) d += 2 * Math.PI;
+      const enlace = Math.abs(d) < 5 * Math.PI / 180;
+      ctx.strokeStyle = enlace ? 'rgba(126,226,168,0.9)' : 'rgba(255,61,127,0.7)'; ctx.setLineDash(enlace ? [] : [3, 4]);
+      ctx.beginPath(); ctx.moveTo(col[0], col[1]); ctx.lineTo(sx, sy); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = '#ffb92e';
+      ctx.save(); ctx.translate(sx, sy); ctx.rotate(-angSat);
+      ctx.fillRect(-3, -3, 6, 6); ctx.fillStyle = '#5aa9ff'; ctx.fillRect(-3, -11, 6, 6); ctx.fillRect(-3, 5, 6, 6);
+      ctx.restore();
+      tel.innerHTML = `TIEMPO <b>${horasMin(tSim / 3600)}</b><br>PERIODO DEL PLANETA <b>${horasMin(p.Th)}</b><br>PERIODO DEL SATÉLITE <b>${Tal / 3600 < 1000 ? horasMin(Tal / 3600) : formatoNum(Tal / 3600, 3) + ' h'}</b><br>DESVÍO <b>${grados(d)}°</b>`;
+    }
+    ctx.font = '600 10.5px "Chakra Petch", sans-serif'; ctx.fillStyle = 'rgba(126,226,168,0.75)'; ctx.textAlign = 'center';
+    if (fase === 'evaluacion' || detenido) ctx.fillText('ÓRBITA ESTACIONARIA', cx, cy - rReal * esc_ - 8);
+    requestAnimationFrame(bucle);
+  }
+  requestAnimationFrame(bucle);
+
+  return {
+    ejecutar(alTerminar) {
+      alFinal = alTerminar;
+      $('#mensaje').textContent = '';
+      ponerFase(valida ? 'insercion' : 'abortada');
+    },
+    destruir() { vivo = false; ro.disconnect(); lienzo.remove(); }
+  };
+}
+</script>

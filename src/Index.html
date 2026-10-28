@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=Share+Tech+Mono&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+  <?!= include('Estilos'); ?>
+</head>
+<body>
+  <div class="cielo" aria-hidden="true"></div>
+
+  <header id="barra" class="barra" hidden>
+    <div class="barra-avatar" id="barra-avatar" tabindex="0" aria-label="Ver tu astronauta"><div id="avatar-mini" class="avatar-mini"></div></div>
+    <div class="barra-id">
+      <div class="barra-etq">Tripulante</div>
+      <div id="barra-nombre" class="barra-nombre"></div>
+      <div id="barra-rango" class="barra-rango"></div>
+    </div>
+    <div class="barra-progreso">
+      <div class="barra-progreso-txt">
+        <span class="barra-etq">Estrellas ★</span>
+        <span><b id="barra-estrellas">0</b> / <span id="barra-objetivo">18</span></span>
+      </div>
+      <div id="barra-segmentos" class="barra-segmentos" role="img"></div>
+      <div id="barra-grupos" class="barra-grupos" aria-hidden="true"></div>
+    </div>
+    <button id="btn-reglas" class="btn-reglas" type="button" aria-label="Ver las reglas de la actividad">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6.5C9.6 4.9 6.6 4.6 3.5 5.4v13c3.1-.8 6.1-.5 8.5 1.1 2.4-1.6 5.4-1.9 8.5-1.1v-13c-3.1-.8-6.1-.5-8.5 1.1z"/><path d="M12 6.5v13"/><path d="M6 9.2c1.4-.2 2.7 0 3.8.5M6 12.2c1.4-.2 2.7 0 3.8.5M14.2 9.7c1.1-.5 2.4-.7 3.8-.5M14.2 12.7c1.1-.5 2.4-.7 3.8-.5"/></svg>
+      <span>Reglas</span>
+    </button>
+    <button id="btn-apuntes" class="btn-reglas" type="button" hidden aria-label="Abrir los apuntes">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2.5h8.5L19 7v14.5H6z"/><path d="M14.5 2.5V7H19"/><path d="M9 11h7M9 14h7M9 17h4.5"/></svg>
+      <span>Apuntes</span>
+    </button>
+  </header>
+
+  <main id="app" class="app">
+    <div class="carga">
+      <canvas class="carga-warp"></canvas>
+      <div class="carga-centro">
+        <div class="carga-hex"><svg viewBox="0 0 120 120" aria-hidden="true">
+          <polygon class="hex-ext" points="60,8 105,34 105,86 60,112 15,86 15,34"/>
+          <polygon class="hex-int" points="60,26 89.4,43 89.4,77 60,94 30.6,77 30.6,43"/>
+          <polygon class="hex-nucleo" points="60,48 72,60 60,72 48,60"/>
+        </svg></div>
+        <div class="carga-titulo" data-texto="Misiones orbitales">Misiones orbitales</div>
+        <div class="carga-sub">Estableciendo enlace con Control de Misión</div>
+        <div class="carga-barra"><span></span></div>
+      </div>
+    </div>
+  </main>
+
+  <div id="modal" class="modal" hidden>
+    <div class="modal-caja" role="dialog" aria-modal="true">
+      <div id="modal-contenido"></div>
+      <div id="modal-botones" class="modal-botones"></div>
+    </div>
+  </div>
+
+  <div id="aviso" class="aviso" role="status" aria-live="polite"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+  <?!= include('Avatar'); ?>
+  <?!= include('Simulaciones'); ?>
+  <?!= include('MisionAscenso'); ?>
+  <?!= include('MisionAcoplamiento'); ?>
+  <?!= include('MisionDespegue'); ?>
+  <?!= include('MisionExoplaneta'); ?>
+  <?!= include('MisionCajaNegra'); ?>
+  <?!= include('MisionEstacionaria'); ?>
+  <?!= include('MisionKepler'); ?>
+  <?!= include('MisionFactura'); ?>
+  <?!= include('MisionTrafico'); ?>
+  <?!= include('App'); ?>
+</body>
+</html>

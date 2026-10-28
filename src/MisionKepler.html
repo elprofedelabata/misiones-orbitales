@@ -1,0 +1,318 @@
+<style>
+  /* =================================================================
+   * Misión «El año de un asteroide»: carta del sistema y 3.ª ley de Kepler
+   * (reutiliza los estilos de la consola de «Ascenso orbital»)
+   * ================================================================= */
+  .vista-ficha-ast { top: 16px; right: 22px; text-align: right; }
+  .vista-ficha-ast .fase { font: 600 13px 'Chakra Petch', sans-serif; letter-spacing: 0.18em; text-transform: uppercase; color: var(--hud-ambar); }
+</style>
+<script>
+/* =====================================================================
+ * Misión «El año de un asteroide»: con el periodo y el radio de un planeta
+ * del mismo sistema, el alumno calcula el periodo del asteroide (Kepler).
+ * ===================================================================== */
+
+function pantallaKepler(m) {
+  limpiarVista();
+  E.mision = m;
+  document.body.classList.add('vista-consola');
+  const s = m.escena;
+  const claveP = 'prediccion-' + m.id;
+  let prediccion = null;
+  try { prediccion = sessionStorage.getItem(claveP); } catch (e) { /* sin almacenamiento */ }
+  const met = x => formatoNum(x) + ' m';
+
+  app.innerHTML = `
+    <section class="consola">
+      <header class="consola-cab">
+        <span class="consola-icono">${iconoMision(m)}</span>
+        <div>
+          <div class="consola-kicker">MSN-${m.id} · Carta del sistema · ${esc(s.estrella)}</div>
+          <h1>${esc(m.titulo)}</h1>
+        </div>
+        <span class="dificultad">${dificultad(m.estrellas)}</span>
+        <span class="en-curso">🔒 Misión en curso · no se puede abandonar</span>
+      </header>
+      <div class="consola-cuerpo">
+        <div class="consola-vista" id="vista">
+          <div class="esquinas"><span></span></div>
+          <div class="vista-hud vista-telemetria" id="telemetria">
+            <div class="hud-nombre">${esc(s.planeta)}</div>
+            <div class="hud-dato">RADIO ORBITAL <b>${met(s.rp)}</b></div>
+            <div class="hud-dato">PERIODO <b>${s.Tp} días</b></div>
+          </div>
+          <div class="vista-hud vista-ficha-ast">
+            <div class="fase" id="fase">Órbita sin calcular</div>
+            <div class="hud-nombre">Asteroide ${esc(s.asteroide)}</div>
+            <div class="hud-dato">RADIO ORBITAL <b>${met(s.ra)}</b></div>
+            <div class="hud-dato">MASA <b>${formatoNum(s.masaAst)} kg</b></div>
+            <div class="hud-dato">DIÁMETRO <b>${s.diamAst} km</b></div>
+          </div>
+          <div class="vista-hud vista-mensaje" id="mensaje"></div>
+        </div>
+        <aside class="consola-lateral" id="lateral">
+          <div class="bloque-hud orden">
+            <div class="bloque-hud-tit">Orden de Control de Misión</div>
+            <p>${esc(m.historia)}</p>
+          </div>
+          <div class="bloque-hud paso-hud">
+            <div class="bloque-hud-tit"><span>01</span> Predicción</div>
+            <p class="orden" style="margin:0 0 8px;font-size:14px;color:rgba(225,235,255,.85)">Si el asteroide estuviera al doble de distancia de la estrella, su año duraría…</p>
+            <div class="predicciones">
+              <button type="button" class="prediccion" data-p="menor">Menos del doble</button>
+              <button type="button" class="prediccion" data-p="igual">El doble</button>
+              <button type="button" class="prediccion" data-p="mayor">Más del doble</button>
+            </div>
+            <p class="paso-nota">No puntúa: lo comprobarás al final.</p>
+          </div>
+          <div class="bloque-hud paso-hud" id="paso-maniobra">
+            <div class="bloque-hud-tit"><span>02</span> Periodo del asteroide</div>
+            <div class="maniobra-entrada">
+              <span class="simbolo">T =</span>
+              <input class="in-mantisa" id="m0" inputmode="decimal" placeholder="mantisa" aria-label="Mantisa">
+              <span class="por-diez">·10^</span>
+              <input class="in-exp" id="e0" inputmode="numeric" placeholder="exp" aria-label="Exponente">
+              <span class="unidad">días</span>
+            </div>
+            <div class="maniobra-previa" id="previa">Tiempo que tarda el asteroide en dar una vuelta a la estrella.</div>
+            <button id="btn-ejecutar" class="btn-hud btn-mantener" type="button" aria-label="Mantén pulsado para calcular la órbita">
+              <span class="relleno"></span>
+              <svg class="icono" viewBox="0 0 20 20" aria-hidden="true"><polygon points="10,1 19,10 10,19 1,10" fill="none" stroke="currentColor" stroke-width="2"/><polygon points="10,6 14,10 10,14 6,10" fill="currentColor"/></svg>
+              <span class="txt">Mantén para calcular la órbita</span>
+            </button>
+          </div>
+        </aside>
+      </div>
+    </section>`;
+
+  E.sim = crearSimKepler($('#vista'), { rp: s.rp, Tp: s.Tp, ra: s.ra, alFase: faseEjecucion });
+
+  // predicción
+  const pasoManiobra = $('#paso-maniobra');
+  const marcarPred = () => {
+    app.querySelectorAll('.prediccion').forEach(b => b.classList.toggle('activa', b.dataset.p === prediccion));
+    pasoManiobra.classList.toggle('bloqueado', !prediccion);
+  };
+  app.querySelectorAll('.prediccion').forEach(b => b.addEventListener('click', () => {
+    prediccion = b.dataset.p;
+    try { sessionStorage.setItem(claveP, prediccion); } catch (e) { /* sin almacenamiento */ }
+    marcarPred();
+  }));
+  marcarPred();
+
+  // vista previa del número
+  const previa = $('#previa');
+  const textoPrevia = 'Tiempo que tarda el asteroide en dar una vuelta a la estrella.';
+  const actualizarPrevia = () => {
+    const v = leerNumeroCliente($('#m0').value, $('#e0').value);
+    if (!$('#m0').value.trim() && !$('#e0').value.trim()) { previa.textContent = textoPrevia; previa.classList.remove('error'); return null; }
+    if (v === null) { previa.textContent = 'Formato no válido'; previa.classList.add('error'); return null; }
+    previa.classList.remove('error');
+    previa.textContent = 'T = ' + formatoNum(v, 4) + ' días';
+    return v;
+  };
+  ['#m0', '#e0'].forEach(sel => $(sel).addEventListener('input', actualizarPrevia));
+
+  // calcular la órbita (mantener pulsado): entrega, simulación e informe
+  const boton = $('#btn-ejecutar'), txt = boton.querySelector('.txt');
+  const mantener = botonMantener(boton, 900, async () => {
+    const valor = actualizarPrevia();
+    if (valor === null) {
+      aviso('Escribe el periodo en notación científica antes de calcular la órbita.');
+      mantener.reiniciar();
+      return;
+    }
+    txt.textContent = 'Transmitiendo…';
+    E.estrellasAntes = E.inicio.estrellas;
+    let res;
+    try {
+      res = await llamar('entregarMision', m.id, [{ m: $('#m0').value.trim(), e: $('#e0').value.trim() }], { prediccion: prediccion });
+    } catch (err) {
+      aviso(mensajeError(err));
+      txt.textContent = 'Mantén para calcular la órbita';
+      mantener.reiniciar();
+      return;
+    }
+    try { sessionStorage.removeItem(claveP); } catch (e) { /* sin almacenamiento */ }
+    E.inicio = res.inicio;
+    pintarBarra();
+    $('.en-curso').textContent = '⏳ Siguiendo al asteroide';
+    mostrarEjecucion(`Periodo calculado <b>${formatoNum(valor, 4)} días</b>`,
+      [['prediccion', 'Predicción de la órbita'], ['seguimiento', 'Seguimiento de 3 vueltas'], ['comparacion', 'Comparación con el asteroide']], 'Siguiendo al asteroide');
+    E.sim.ejecutar(valor, res.sol, res.estrellas, resultadoSim => informeKepler(m, res, valor, resultadoSim));
+  }, () => {
+    txt.textContent = 'Mantén pulsado…';
+    clearTimeout(boton._t);
+    boton._t = setTimeout(() => { txt.textContent = 'Mantén para calcular la órbita'; }, 1400);
+  });
+}
+
+function informeKepler(m, res, valor, resultadoSim) {
+  const s = m.escena;
+  $('.consola-cuerpo').classList.add('resultado');
+  const lateral = $('#lateral');
+  const estrellas = Array.from({ length: m.estrellas }, (_, i) =>
+    `<span style="animation-delay:${0.15 + i * 0.25}s" class="${i < res.estrellas ? '' : 'apagada'}">★</span>`).join('');
+  const textosPred = { mayor: 'más del doble', igual: 'el doble', menor: 'menos del doble' };
+  const pred = res.prediccion
+    ? `<p class="informe-pred">Predijiste que, al doble de distancia, su año duraría <b class="${res.prediccion === 'mayor' ? 'ok' : 'mal'}">${textosPred[res.prediccion]}</b>.
+        ${res.prediccion === 'mayor' ? '¡Correcto!' : 'En realidad duraría más del doble.'}
+        Como \\(T \\propto r^{3/2}\\), al doblar el radio el periodo se multiplica por \\(2^{3/2} \\approx 2{,}83\\): pasaría de ${formatoNum(res.sol, 4)} a ${formatoNum(res.sol * Math.pow(2, 1.5), 4)} días.</p>`
+    : '';
+  const titulo = res.estrellas === m.estrellas ? 'Órbita calculada' : 'Órbita errónea';
+
+  lateral.classList.remove('ejecutando');
+  lateral.classList.add('informe');
+  lateral.innerHTML = `
+    <div class="bloque-hud">
+      <div class="bloque-hud-tit">Informe de misión</div>
+      ${resultadoSim ? `<div class="informe-sim ${resultadoSim.ok ? 'ok' : 'mal'}">${esc(resultadoSim.texto)}</div>` : ''}
+      <div class="informe-estrellas">${estrellas}</div>
+      <div class="informe-resumen">${titulo} · ${res.estrellas} de ${m.estrellas} ★</div>
+    </div>
+    <div class="bloque-hud">
+      <div class="bloque-hud-tit">Periodo del asteroide</div>
+      <table class="informe-tabla">
+        <tr><td>Tu periodo</td><td>${formatoNum(valor, 4)} días</td></tr>
+        <tr><td>Periodo real</td><td>${formatoNum(res.sol, 4)} días</td></tr>
+        <tr><td>Error relativo</td><td>${res.error === null ? 'signo incorrecto' : res.error < 0.0001 ? '< 0,01 %' : formatoNum(res.error * 100, 3) + ' %'}</td></tr>
+      </table>
+      <div class="informe-escala">${textoEscala(m.estrellas)}</div>
+    </div>
+    ${res.pista ? `<div class="informe-pista"><b>Diagnóstico</b>${esc(res.pista)}</div>` : ''}
+    ${pred ? `<div class="bloque-hud"><div class="bloque-hud-tit">Tu predicción</div>${pred}</div>` : ''}
+    <div class="bloque-hud">
+      <div class="bloque-hud-tit">Resolución</div>
+      <ol class="pasos">${res.pasos.map(p => `<li>${p}</li>`).join('')}</ol>
+    </div>
+    <button id="btn-volver" class="btn-hud principal" type="button">Volver al registro de misiones</button>`;
+  renderMates(lateral);
+  lateral.scrollTop = 0;
+  $('.en-curso').textContent = '✓ Misión completada';
+  $('#btn-volver').addEventListener('click', pantallaPanel);
+  celebrar(E.estrellasAntes, res.inicio.estrellas, res.inicio.objetivo);
+}
+
+/* --------------------------- Simulador ---------------------------- */
+
+/**
+ * Carta del sistema vista desde arriba. Antes de entregar, el planeta gira (1 vuelta ≈ 5 s) y el
+ * asteroide está quieto en su órbita. Al entregar, el asteroide real gira con su periodo y el
+ * «modelo» con el periodo del alumno durante 3 vueltas.
+ */
+function crearSimKepler(cont, p) {
+  const lienzo = document.createElement('canvas');
+  cont.insertBefore(lienzo, cont.firstChild);
+  const ctx = lienzo.getContext('2d');
+  let W = 0, H = 0;
+  const fondo = Array.from({ length: 170 }, () => ({ x: Math.random(), y: Math.random(), r: Math.random() * 1.1 + 0.2, a: Math.random() * 0.6 + 0.2 }));
+  const ajustar = () => {
+    const k = Math.min(window.devicePixelRatio || 1, 2);
+    W = cont.clientWidth; H = cont.clientHeight;
+    lienzo.width = W * k; lienzo.height = H * k;
+    ctx.setTransform(k, 0, 0, k, 0, 0);
+  };
+  const ro = new ResizeObserver(ajustar);
+  ro.observe(cont);
+  ajustar();
+
+  const elFase = $('#fase');
+  // forma irregular fija del asteroide
+  const roca = Array.from({ length: 9 }, (_, i) => 0.75 + 0.25 * Math.abs(Math.sin(i * 2.3 + 1.1)));
+  const a0p = 0.6, a0a = 2.3;                                    // ángulos iniciales
+  let fase = 'espera', tFase = 0, dias = 0, ritmo = p.Tp / 5;    // días simulados por segundo real
+  let Treal = null, Tal = null, detenido = false, alFinal = null, estrellas = 0;
+  const nombres = { prediccion: 'Predicción de la órbita', seguimiento: 'Seguimiento de 3 vueltas', comparacion: 'Comparación con el asteroide', abortada: 'Periodo no válido' };
+  const ponerFase = nf => { fase = nf; tFase = 0; elFase.textContent = nombres[nf]; if (p.alFase) p.alFase(nf, nombres[nf]); };
+
+  function terminar() {
+    if (detenido) return;
+    detenido = true;
+    let texto, ok = false;
+    if (!(Tal > 0)) texto = 'Periodo no válido: debe ser positivo';
+    else {
+      const desfase = 3 * Math.abs(Treal - Tal);
+      ok = estrellas > 0;
+      const cuanto = desfase < 1 ? 'menos de un día' : formatoNum(desfase, 3) + ' días';
+      texto = ok ? 'Tu órbita sigue al asteroide: desfase de ' + cuanto + ' tras 3 vueltas'
+        : 'Tu órbita pierde al asteroide: desfase de ' + cuanto + ' tras 3 vueltas';
+    }
+    const msg = $('#mensaje');
+    msg.textContent = texto;
+    msg.className = 'vista-hud vista-mensaje ' + (ok ? 'ok' : 'mal');
+    if (alFinal) { const cb = alFinal; alFinal = null; setTimeout(() => cb({ texto: texto, ok: ok }), 900); }
+  }
+
+  function avanzar(dt) {
+    if (detenido) return;
+    tFase += dt;
+    if (fase === 'abortada') { if (tFase > 1.2) terminar(); return; }
+    if (fase === 'prediccion') { if (tFase > 0.9) { dias = 0; ponerFase('seguimiento'); } return; }
+    if (fase === 'seguimiento') { dias = Math.min(3 * Treal, dias + dt * ritmo); if (dias >= 3 * Treal) ponerFase('comparacion'); return; }
+    if (fase === 'comparacion') { if (tFase > 1) terminar(); return; }
+    dias += dt * ritmo;                                         // en espera: solo gira el planeta
+  }
+
+  let vivo = true, previo = performance.now();
+  function bucle(ahora) {
+    if (!vivo) return;
+    const dt = Math.min(0.05, (ahora - previo) / 1000);
+    previo = ahora;
+    avanzar(dt);
+    ctx.clearRect(0, 0, W, H);
+    fondo.forEach(st => { ctx.globalAlpha = st.a; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(st.x * W, st.y * H, st.r, 0, Math.PI * 2); ctx.fill(); });
+    ctx.globalAlpha = 1;
+    const cx = W / 2, cy = H / 2 + 14;
+    const esc_ = Math.min(W * 0.46, H * 0.4) / p.ra;             // píxeles por metro
+    // estrella
+    const g = ctx.createRadialGradient(cx, cy, 2, cx, cy, 34);
+    g.addColorStop(0, '#fffbe8'); g.addColorStop(0.3, 'rgba(255,214,140,0.85)'); g.addColorStop(1, 'rgba(255,170,80,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, 34, 0, Math.PI * 2); ctx.fill();
+    // órbitas
+    ctx.save(); ctx.setLineDash([5, 7]); ctx.lineWidth = 1.2;
+    ctx.strokeStyle = 'rgba(63,224,255,0.5)'; ctx.beginPath(); ctx.arc(cx, cy, p.rp * esc_, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = 'rgba(201,166,107,0.55)'; ctx.beginPath(); ctx.arc(cx, cy, p.ra * esc_, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
+    ctx.font = '600 10.5px "Chakra Petch", sans-serif'; ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(63,224,255,0.75)'; ctx.fillText(formatoNum(p.rp) + ' m', cx, cy - p.rp * esc_ - 7);
+    ctx.fillStyle = 'rgba(201,166,107,0.85)'; ctx.fillText(formatoNum(p.ra) + ' m', cx, cy - p.ra * esc_ - 7);
+    // planeta
+    const ap = a0p + 2 * Math.PI * dias / p.Tp;
+    const px = cx + Math.cos(ap) * p.rp * esc_, py = cy - Math.sin(ap) * p.rp * esc_;
+    const gp = ctx.createRadialGradient(px - 2, py - 2, 1, px, py, 7);
+    gp.addColorStop(0, '#bfe8ff'); gp.addColorStop(1, '#2f6fa8');
+    ctx.fillStyle = gp; ctx.beginPath(); ctx.arc(px, py, 6.5, 0, Math.PI * 2); ctx.fill();
+    // asteroide real (quieto hasta entregar) y órbita del alumno
+    const enMarcha = fase === 'seguimiento' || fase === 'comparacion' || detenido;
+    const aa = a0a + (enMarcha && Treal ? 2 * Math.PI * dias / Treal : 0);
+    const ax = cx + Math.cos(aa) * p.ra * esc_, ay = cy - Math.sin(aa) * p.ra * esc_;
+    ctx.save(); ctx.translate(ax, ay); ctx.rotate(dias * 0.02);
+    ctx.fillStyle = '#9c8a72'; ctx.beginPath();
+    roca.forEach((rr, i) => { const a = i / roca.length * Math.PI * 2; const x = Math.cos(a) * 6 * rr, y = Math.sin(a) * 6 * rr; i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+    ctx.closePath(); ctx.fill(); ctx.restore();
+    if (enMarcha && Tal > 0) {
+      const am = a0a + 2 * Math.PI * dias / Tal;
+      const mx = cx + Math.cos(am) * p.ra * esc_, my = cy - Math.sin(am) * p.ra * esc_;
+      ctx.strokeStyle = '#ffb92e'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(mx, my, 11, 0, Math.PI * 2); ctx.stroke();
+      ctx.font = '600 10px "Chakra Petch", sans-serif'; ctx.fillStyle = '#ffb92e'; ctx.textAlign = 'left'; ctx.fillText('TU ÓRBITA', mx + 14, my + 4);
+    }
+    ctx.font = '600 10px "Chakra Petch", sans-serif'; ctx.fillStyle = 'rgba(220,235,255,0.75)'; ctx.textAlign = 'left';
+    ctx.fillText('ASTEROIDE', ax + 10, ay - 8);
+    ctx.font = '12px "Share Tech Mono", monospace'; ctx.fillStyle = 'rgba(220,235,255,0.75)'; ctx.textAlign = 'left';
+    ctx.fillText('DÍAS TRANSCURRIDOS · ' + Math.round(dias), 20, H - 22);
+    requestAnimationFrame(bucle);
+  }
+  requestAnimationFrame(bucle);
+
+  return {
+    ejecutar(valor, sol, est, alTerminar) {
+      alFinal = alTerminar; estrellas = est; Treal = sol; Tal = valor;
+      $('#mensaje').textContent = '';
+      ritmo = 3 * Treal / 9;                                    // 3 vueltas del asteroide en 9 s
+      dias = 0;
+      ponerFase(valor > 0 ? 'prediccion' : 'abortada');
+    },
+    destruir() { vivo = false; ro.disconnect(); lienzo.remove(); }
+  };
+}
+</script>

@@ -1,0 +1,1606 @@
+<script>
+/* =====================================================================
+ * Lógica de la interfaz: panel de misiones, editor de avatar y misiones.
+ * ===================================================================== */
+
+
+const E = {
+  inicio: null,
+  mini: null,
+  editor: null,
+  sim: null,
+  mision: null
+};
+
+const $ = sel => document.querySelector(sel);
+const app = $('#app');
+
+// Versión web (GitHub Pages): modo práctica sin servidor. Se pueden repetir las misiones con datos nuevos
+// (cuenta el mejor resultado) y la partida se guarda en el navegador. La activa web/partida.js.
+const PRACTICA = !!window.MODO_PRACTICA;
+if (PRACTICA) document.body.classList.add('practica');
+
+function llamar(fn) {
+  const args = Array.prototype.slice.call(arguments, 1);
+  return new Promise((ok, mal) => {
+    google.script.run.withSuccessHandler(ok).withFailureHandler(err => {
+      // si el profesor ha terminado la campaña, cualquier envío lleva a la pantalla final
+      if (/campaña ha terminado/i.test(mensajeError(err))) campanaTerminada();
+      // si desbloqueó o reinició la misión que el alumno tenía abierta, se vuelve al panel
+      if (/misión ya no está en curso/i.test(mensajeError(err))) misionRetirada();
+      mal(err);
+    })[fn].apply(null, args);
+  });
+}
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function aviso(texto) {
+  const a = $('#aviso');
+  a.textContent = texto;
+  a.classList.add('visible');
+  clearTimeout(aviso._t);
+  aviso._t = setTimeout(() => a.classList.remove('visible'), 4500);
+}
+
+function mensajeError(err) {
+  return (err && err.message ? err.message : String(err)).replace(/^Error:\s*/, '');
+}
+
+function renderMates(el) {
+  if (window.renderMathInElement) {
+    renderMathInElement(el, {
+      delimiters: [{ left: '$$', right: '$$', display: true }, { left: '\\(', right: '\\)', display: false }],
+      throwOnError: false
+    });
+  }
+}
+
+function modal(html, botones, clase) {
+  return new Promise(res => {
+    $('.modal-caja').className = 'modal-caja' + (clase ? ' ' + clase : '');
+    $('#modal-contenido').innerHTML = html;
+    const zona = $('#modal-botones');
+    zona.innerHTML = '';
+    const cerrar = valor => { $('#modal').hidden = true; res(valor); };
+    botones.forEach(b => {
+      const el = document.createElement('button');
+      el.type = 'button';
+      if (b.mantener) {
+        // Acción irreversible: hay que mantener pulsado para confirmar
+        el.className = 'btn-hud btn-mantener';
+        el.innerHTML = `<span class="relleno"></span><svg class="icono" viewBox="0 0 20 20" aria-hidden="true"><polygon points="10,1 19,10 10,19 1,10" fill="none" stroke="currentColor" stroke-width="2"/><polygon points="10,6 14,10 10,14 6,10" fill="currentColor"/></svg><span class="txt">${esc(b.texto)}</span>`;
+        el.setAttribute('aria-label', 'Mantén pulsado: ' + b.texto);
+        const txt = el.querySelector('.txt');
+        botonMantener(el, 900, () => setTimeout(() => cerrar(b.valor), 150), () => {
+          txt.textContent = 'Mantén pulsado…';
+          clearTimeout(el._t);
+          el._t = setTimeout(() => { txt.textContent = b.texto; }, 1400);
+        });
+      } else {
+        el.className = 'btn-hud ' + (b.clase === 'btn-sec' ? '' : 'principal');
+        el.textContent = b.texto;
+        el.onclick = () => cerrar(b.valor);
+      }
+      zona.appendChild(el);
+    });
+    $('#modal').hidden = false;
+    renderMates($('#modal-contenido'));
+    const campo = $('#modal-contenido input');
+    if (campo) campo.focus();
+  });
+}
+
+function limpiarVista() {
+  if (E.editor) { E.editor.destruir(); E.editor = null; }
+  if (E.sim) { E.sim.destruir(); E.sim = null; }
+  if (E.manos) { E.manos.destruir(); E.manos = null; }
+  if (E.densidad) { E.densidad.disconnect(); E.densidad = null; }
+  if (E.escena) { E.escena.destruir(); E.escena = null; }
+  E.pantalla = 'otra';
+  ocultarTip();
+  document.body.classList.remove('vista-panel', 'vista-consola', 'vista-campana');
+  window.scrollTo(0, 0);
+}
+
+/* ------------------------ Pantalla de carga ------------------------ */
+
+const LOG_CARGA = [
+  'Calibrando sensores gravitatorios', 'Calculando órbitas keplerianas', 'Sincronizando reloj sidéreo',
+  'Presurizando trajes', 'Comprobando reservas de combustible', 'Alineando antenas de alta ganancia',
+  'Midiendo la velocidad de escape', 'Descargando efemérides', 'Verificando la tercera ley de Kepler',
+  'Estimando la masa de Júpiter', 'Reservando hueco en órbita geoestacionaria', 'Cargando oxígeno',
+  'Comprobando el sello del casco', 'Despejando la plataforma de lanzamiento', 'Contando estrellas',
+  'Calentando motores iónicos'
+];
+
+function pantallaCarga(subtitulo) {
+  limpiarVista();
+  app.innerHTML = `
+    <div class="carga">
+      <canvas class="carga-warp"></canvas>
+      <div class="carga-centro">
+        <div class="carga-hex"><svg viewBox="0 0 120 120" aria-hidden="true">
+          <polygon class="hex-ext" points="60,8 105,34 105,86 60,112 15,86 15,34"/>
+          <polygon class="hex-int" points="60,26 89.4,43 89.4,77 60,94 30.6,77 30.6,43"/>
+          <polygon class="hex-nucleo" points="60,48 72,60 60,72 48,60"/>
+        </svg></div>
+        <div class="carga-titulo" data-texto="Misiones orbitales">Misiones orbitales</div>
+        <div class="carga-sub">${esc(subtitulo || 'Estableciendo enlace con Control de Misión')}</div>
+        <div class="carga-barra"><span></span></div>
+        <ul class="carga-log" aria-hidden="true"></ul>
+      </div>
+      <div class="carga-pie">Física · 2º Bachillerato · Campo gravitatorio</div>
+    </div>`;
+  const carga = app.querySelector('.carga');
+  hiperespacio(carga.querySelector('canvas'));
+  const log = carga.querySelector('.carga-log');
+  const lineas = LOG_CARGA.slice().sort(() => Math.random() - 0.5);
+  let i = 0;
+  const reloj = setInterval(() => {
+    if (!carga.isConnected) return clearInterval(reloj);
+    const li = document.createElement('li');
+    li.innerHTML = `<span>› ${esc(lineas[i % lineas.length])}</span><b>[OK]</b>`;
+    log.appendChild(li);
+    while (log.children.length > 4) log.removeChild(log.firstChild);
+    i++;
+  }, 650);
+}
+
+/** Estrellas que vienen hacia la cámara: salto al hiperespacio. */
+function hiperespacio(lienzo) {
+  const ctx = lienzo.getContext('2d');
+  let W = 0, H = 0;
+  const estrellas = [];
+  const nueva = (s, cualquiera) => {
+    s.x = (Math.random() - 0.5) * 2;
+    s.y = (Math.random() - 0.5) * 2;
+    s.z = cualquiera ? Math.random() * 1.2 + 0.05 : 1.25;
+    s.pz = s.z;
+    const r = Math.random();
+    s.color = r < 0.16 ? '63,224,255' : r < 0.22 ? '255,185,46' : r < 0.25 ? '255,61,127' : '244,247,255';
+    return s;
+  };
+  for (let i = 0; i < 280; i++) estrellas.push(nueva({}, true));
+
+  function ajustar() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = lienzo.clientWidth; H = lienzo.clientHeight;
+    lienzo.width = W * dpr; lienzo.height = H * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  ajustar();
+  window.addEventListener('resize', ajustar);
+
+  const t0 = performance.now();
+  let previo = t0;
+  function bucle(ahora) {
+    if (!lienzo.isConnected) { window.removeEventListener('resize', ajustar); return; }
+    const dt = Math.min(0.05, (ahora - previo) / 1000);
+    previo = ahora;
+    const v = (0.25 + Math.min(1, (ahora - t0) / 2500) * 0.55) * dt;  // acelera al principio
+    ctx.fillStyle = 'rgba(5, 8, 17, 0.32)';
+    ctx.fillRect(0, 0, W, H);
+    const f = Math.max(W, H) * 0.42, cx = W / 2, cy = H / 2;
+    estrellas.forEach(s => {
+      s.pz = s.z;
+      s.z -= v;
+      if (s.z <= 0.03) { nueva(s, false); return; }
+      const x = cx + (s.x / s.z) * f, y = cy + (s.y / s.z) * f;
+      const px = cx + (s.x / s.pz) * f, py = cy + (s.y / s.pz) * f;
+      if (x < -50 || x > W + 50 || y < -50 || y > H + 50) { nueva(s, false); return; }
+      const brillo = Math.min(1, (1.25 - s.z) * 1.1);
+      ctx.strokeStyle = 'rgba(' + s.color + ',' + brillo + ')';
+      ctx.lineWidth = Math.max(0.6, (1.25 - s.z) * 2.4);
+      ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(x, y); ctx.stroke();
+    });
+    requestAnimationFrame(bucle);
+  }
+  requestAnimationFrame(bucle);
+}
+
+/** Nivel de rango (0 = Cadete … 7 = Leyenda estelar) según las estrellas; los tramos llegan del servidor. */
+function nivelRango(estrellas) {
+  const rs = E.inicio.rangos;
+  let k = 0;
+  rs.forEach((x, i) => { if (estrellas >= x.min) k = i; });
+  return k;
+}
+function rango(estrellas) { return E.inicio.rangos[nivelRango(estrellas)].n; }
+
+/** Lienzo con el galón de un nivel (tamaño en píxeles CSS). */
+function lienzoGalon(nivel, w, h, clase) {
+  const k = Math.min(window.devicePixelRatio || 1, 2);
+  const cv = document.createElement('canvas');
+  cv.width = Math.round(w * k); cv.height = Math.round(h * k);
+  cv.style.width = w + 'px'; cv.style.height = h + 'px';
+  if (clase) cv.className = clase;
+  dibujarGalon(cv.getContext('2d'), nivel, cv.width, cv.height);
+  return cv;
+}
+
+/**
+ * Celebración al terminar una misión: ascenso de rango (con el galón nuevo) y, si toca, objetivo cumplido.
+ */
+function celebrar(antes, despues, objetivo) {
+  const subeRango = nivelRango(despues) > nivelRango(antes);
+  const objetivoNuevo = antes < objetivo && despues >= objetivo;
+  if (!subeRango && !objetivoNuevo) return;
+  const msgObjetivo = `<p class="ascenso-objetivo"><b>¡Objetivo cumplido!</b> Has reunido ${despues} estrellas. Puedes seguir haciendo misiones para ganar más.</p>`;
+  setTimeout(() => {
+    if (!subeRango) {
+      modal(`<div class="confeti">🏅🚀✨</div><h2>¡Objetivo cumplido!</h2>${msgObjetivo}`, [{ texto: '¡Genial!', valor: true }]);
+      return;
+    }
+    const k = nivelRango(despues), rs = E.inicio.rangos, sig = rs[k + 1];
+    modal(`
+      <div class="ascenso">
+        <div class="modal-kicker">¡Ascenso!</div>
+        <div class="ascenso-galon" id="ascenso-galon"></div>
+        <h2>Ahora eres ${esc(rs[k].n)}</h2>
+        ${objetivoNuevo ? msgObjetivo : ''}
+        <p class="ascenso-sig">${sig ? `Siguiente rango: <b>${esc(sig.n)}</b> a las ${sig.min} ★` : 'Has alcanzado el rango máximo: las 18 estrellas.'}</p>
+      </div>`, [{ texto: '¡A por más!', valor: true }], 'modal-ascenso');
+    const hueco = $('#ascenso-galon');
+    if (hueco) hueco.appendChild(lienzoGalon(k, 110, 132));
+  }, 1500);
+}
+
+
+function bloque(id) { return E.inicio.bloques.find(b => b.id === id) || { nombre: '', color: '#888' }; }
+
+function dificultad(n, max) {
+  max = max || 3;
+  let s = '';
+  for (let i = 0; i < max; i++) s += i < n ? '★' : '<span class="apagada">★</span>';
+  return s;
+}
+
+/* ---------------------- Iconos de las misiones ---------------------- */
+
+// Iconos de línea (24×24, trazo con el color del texto) por código de misión
+const ICONOS_MISION = {
+  // Bautismo orbital: planeta con órbita y satélite
+  O1: '<circle cx="12" cy="12" r="4.5"/><ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(-20 12 12)"/><circle cx="20.3" cy="8.7" r="1.5" fill="currentColor" stroke="none"/>',
+  // Billete de vuelta: cohete
+  X1: '<path d="M12 2.5c3 2.5 4.5 6 4.5 10L14.5 15h-5l-2-2.5c0-4 1.5-7.5 4.5-10z"/><circle cx="12" cy="9" r="1.6"/><path d="M9.5 15l-2.5 3.6 3-.8M14.5 15l2.5 3.6-3-.8M12 17.2v4"/>',
+  // El año de un asteroide: estrella, órbita y asteroide
+  K1: '<circle cx="4.5" cy="19" r="2.3"/><path d="M4 13.5C7 8 13 5 21 5.5" stroke-dasharray="2 2.4"/><path d="M13 9.6l2.4-1.6 2.8.6 1.2 2.4-1 2.8-2.8.9-2.3-1.4z"/>',
+  // Factura energética: recibo con rayo
+  E2: '<path d="M6 2.5h12v19l-2-1.4-2 1.4-2-1.4-2 1.4-2-1.4-2 1.4z"/><path d="M12.8 6.5L9.6 12h3l-1.2 5 3.5-6h-3z"/>',
+  // Vigilante fijo: satélite fijo sobre un punto del planeta
+  G1: '<path d="M5.5 21.5a6.5 6.5 0 0 1 13 0"/><circle cx="12" cy="17.3" r="1.1" fill="currentColor" stroke="none"/><path d="M12 15.5V9" stroke-dasharray="1.6 2"/><rect x="10" y="4" width="4" height="3.4" rx=".6"/><path d="M5.5 5.7H10M14 5.7h4.5"/>',
+  // Tráfico orbital: planeta con dos órbitas y satélites
+  X2: '<circle cx="12" cy="12" r="3.2"/><circle cx="12" cy="12" r="6.6" stroke-dasharray="2 2"/><circle cx="12" cy="12" r="10" stroke-dasharray="2 2"/><rect x="15.8" y="5.6" width="3" height="3" fill="currentColor" stroke="none"/><rect x="2.4" y="12.6" width="3" height="3" fill="currentColor" stroke="none"/>',
+  // Caja negra: registrador de vuelo con asa y traza de telemetría
+  O3: '<rect x="3.5" y="7" width="17" height="13" rx="1.5"/><path d="M9 7V4.5h6V7"/><path d="M6 14h3l1.5-3 2.5 6 1.5-3H18"/>',
+  // Ascenso orbital: órbita baja, órbita alta y flecha de subida
+  E3: '<circle cx="12" cy="17" r="3"/><path d="M5.5 17a6.5 6.5 0 0 1 13 0" stroke-dasharray="2 2"/><path d="M2.5 17a9.5 9.5 0 0 1 19 0"/><path d="M12 10.5V2.8M9.6 5.2L12 2.8l2.4 2.4"/>',
+  // Cazador de exoplanetas: telescopio
+  K3: '<path d="M3 11.5l12.5-5 2 4.6-12.5 5z"/><path d="M15.5 6.5l2.7-1.1 2 4.6-2.7 1.1"/><path d="M9.6 14.2l-3 7M11 13.7l3 7.5"/><circle cx="20.3" cy="18.5" r="1" fill="currentColor" stroke="none"/>'
+};
+// Para misiones del banco sin icono propio: una órbita genérica
+const ICONO_GENERICO = '<circle cx="12" cy="12" r="3.5"/><ellipse cx="12" cy="12" rx="9.5" ry="5"/><circle cx="21" cy="11" r="1.3" fill="currentColor" stroke="none"/>';
+
+function iconoMision(m) {
+  return '<svg class="ico-mision" viewBox="0 0 24 24" aria-hidden="true">' + (ICONOS_MISION[m.id] || ICONO_GENERICO) + '</svg>';
+}
+
+/* ------------------------------ Barra ------------------------------ */
+
+function pintarBarra() {
+  const ini = E.inicio;
+  $('#barra').hidden = false;
+  $('#barra-nombre').textContent = ini.indicativo || ini.correo.split('@')[0];
+  // rango con su galón y, en el tooltip, cuánto falta para el siguiente
+  const nivel = nivelRango(ini.estrellas), sigR = ini.rangos[nivel + 1];
+  const br = $('#barra-rango');
+  br.innerHTML = '';
+  br.appendChild(lienzoGalon(nivel, 15, 18, 'galon-barra'));
+  br.appendChild(document.createTextNode(rango(ini.estrellas)));
+  br.dataset.ayuda = sigR ? `Faltan ${sigR.min - ini.estrellas} ★ para ${sigR.n}` : 'Rango máximo alcanzado';
+  $('#barra-estrellas').textContent = ini.estrellas;
+  $('#btn-apuntes').hidden = !ini.apuntes;
+  // Un segmento por cada estrella en juego: las primeras «objetivo» son obligatorias; el resto, extra.
+  // Los recién ganados destellan.
+  const total = ini.catalogo.reduce((n, m) => n + m.estrellas, 0);
+  $('#barra-objetivo').textContent = total;               // «X / 18»: el objetivo ya se marca en la barra
+  const previas = E.estrellasPintadas === undefined ? ini.estrellas : E.estrellasPintadas;
+  const segs = $('#barra-segmentos');
+  segs.classList.toggle('barra-objetivo', ini.estrellas >= ini.objetivo);
+  segs.setAttribute('aria-label', ini.estrellas + ' estrellas; objetivo ' + ini.objetivo + ' de ' + total);
+  const seg = i => `<span class="seg ${i < ini.estrellas ? 'lleno' : ''} ${i >= previas && i < ini.estrellas ? 'nuevo' : ''}"></span>`;
+  const rango_ = (a, b) => Array.from({ length: b - a }, (_, k) => seg(a + k)).join('');
+  segs.innerHTML = `<div class="seg-grupo oblig" style="flex:${ini.objetivo}">${rango_(0, ini.objetivo)}</div>` +
+    `<span class="seg-sep"></span><div class="seg-grupo extra" style="flex:${total - ini.objetivo}">${rango_(ini.objetivo, total)}</div>`;
+  $('#barra-grupos').innerHTML = `<span class="oblig" style="flex:${ini.objetivo}">Objetivo · ${ini.objetivo}</span><span class="seg-sep"></span>` +
+    `<span class="extra" style="flex:${total - ini.objetivo}">Extra · ${total - ini.objetivo}</span>`;
+  E.estrellasPintadas = ini.estrellas;
+
+  if (!E.mini) {
+    E.mini = crearAvatar($('#avatar-mini'), ini.avatar, { mini: true, galon: nivel });
+  } else {
+    E.mini.actualizar(ini.avatar || {});
+    E.mini.ponerGalon(nivel);
+  }
+  if (E.popAv) E.popAv.ponerGalon(nivel);
+}
+
+$('#btn-reglas').addEventListener('click', () => mostrarReglas(false));
+
+/** Modo práctica: borra la partida guardada en el navegador (astronauta, indicativo y estrellas) y empieza de cero. */
+if (PRACTICA) {
+  const b = document.createElement('button');
+  b.id = 'btn-nueva-partida';
+  b.className = 'btn-reglas';
+  b.type = 'button';
+  b.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4.5h4.5"/></svg><span>Nueva partida</span>';
+  $('#btn-reglas').after(b);
+  b.addEventListener('click', async () => {
+    const si = await modal(`
+      <div class="modal-kicker">Partida guardada en este navegador</div>
+      <h2>¿Empezar una nueva partida?</h2>
+      <p>Se borrarán tu astronauta, tu indicativo y todas tus estrellas. Las misiones tendrán datos nuevos.</p>
+      <div class="modal-aviso">No se puede deshacer.</div>`,
+      [{ texto: 'Cancelar', clase: 'btn-sec', valor: false }, { texto: 'Borrar y empezar', valor: true, mantener: true }]);
+    if (!si) return;
+    await llamar('nuevaPartida');
+    location.reload();
+  });
+}
+
+/** Ventana obligatoria para quien guardó su avatar antes de que el indicativo fuera obligatorio. */
+async function pedirIndicativo() {
+  let error = '';
+  for (;;) {
+    await modal(`
+      <div class="modal-kicker">Registro de tripulación</div>
+      <h2>Elige tu indicativo</h2>
+      <p>Será tu nombre en la nave y en el <b>puente de mando</b>, la clasificación que se proyecta en clase. Entre 3 y 20 caracteres: letras, números, espacios y - . _ <b>No podrás cambiarlo.</b></p>
+      <input id="in-indicativo-modal" class="campo-hud" maxlength="20" placeholder="p. ej. Halcón-7" aria-label="Indicativo">
+      ${error ? `<p class="modal-aviso">${esc(error)}</p>` : ''}`, [{ texto: 'Confirmar indicativo', valor: true }]);
+    const nombre = ($('#in-indicativo-modal').value || '').trim();
+    try {
+      E.inicio = await llamar('ponerIndicativo', nombre);
+      return;
+    } catch (err) { error = mensajeError(err); }
+  }
+}
+
+/* Popup con el astronauta de cuerpo entero al pasar el ratón por el avatar de la barra */
+function mostrarPopAvatar() {
+  const ini = E.inicio;
+  if (!ini || !ini.avatar) return;
+  clearTimeout(E.popT);
+  prepararPopAvatar();
+  const pop = $('#pop-avatar');
+  const nivel = nivelRango(ini.estrellas);
+  const info = $('#pop-info');
+  info.innerHTML = `<div class="pop-nombre">${esc(ini.indicativo || ini.correo.split('@')[0])}</div>
+    <div class="pop-rango"></div>
+    <div class="pop-estrellas"><b>${ini.estrellas}</b> / ${ini.catalogo.reduce((n, m) => n + m.estrellas, 0)} ★</div>`;
+  const pr = info.querySelector('.pop-rango');
+  pr.appendChild(lienzoGalon(nivel, 18, 22));
+  pr.appendChild(document.createTextNode(rango(ini.estrellas)));
+  // a la derecha del avatar de la barra
+  const r = $('#barra-avatar').getBoundingClientRect();
+  pop.style.left = Math.min(r.right + 12, innerWidth - 270) + 'px';
+  pop.style.top = Math.max(8, r.top) + 'px';
+  pop.classList.add('visible');
+  prepararPopAvatar();
+  E.popAv.ponerGalon(nivel);
+  E.popAv.pausar(false);
+}
+
+/**
+ * Crea (una vez) la escena 3D del visor. Durante la carga se prepara oculta: dibuja unos fotogramas
+ * para que se compilen los sombreadores y se queda en pausa hasta que se abra el popup.
+ */
+function prepararPopAvatar() {
+  const ini = E.inicio;
+  if (E.popAv || !ini || !ini.avatar) return;
+  let pop = $('#pop-avatar');
+  if (!pop) {
+    pop = document.createElement('div');
+    pop.id = 'pop-avatar';
+    pop.className = 'pop-avatar';
+    pop.setAttribute('role', 'tooltip');
+    pop.innerHTML = '<div class="pop-escena" id="pop-escena"></div><div class="pop-info" id="pop-info"></div>';
+    document.body.appendChild(pop);
+  }
+  // cámara más cerca que en el editor: el cuerpo entero llena el popup
+  E.popAv = crearAvatar($('#pop-escena'), ini.avatar, { plataforma: true, galon: nivelRango(ini.estrellas), nombre: ini.indicativo || '', camara: { pos: [0, 1.95, 7.6], mira: [0, 1.62, 0] } });
+  setTimeout(() => { if (E.popAv && !$('#pop-avatar').classList.contains('visible')) E.popAv.pausar(true); }, 700);
+}
+function ocultarPopAvatar() {
+  clearTimeout(E.popT);
+  E.popT = setTimeout(() => {
+    const pop = $('#pop-avatar');
+    if (pop) pop.classList.remove('visible');
+    if (E.popAv) E.popAv.pausar(true);
+  }, 120);
+}
+['pointerenter', 'focus'].forEach(ev => $('#barra-avatar').addEventListener(ev, mostrarPopAvatar));
+['pointerleave', 'blur'].forEach(ev => $('#barra-avatar').addEventListener(ev, ocultarPopAvatar));
+
+/** Reglas de la actividad: al terminar el avatar (una sola vez) y con el botón «Reglas» de la barra. */
+function mostrarReglas(primeraVez) {
+  const ini = E.inicio || {};
+  const total = (ini.catalogo || []).reduce((n, m) => n + m.estrellas, 0);
+  return modal(`
+    <div class="modal-kicker">${primeraVez ? 'Antes de despegar' : 'Manual de a bordo'}</div>
+    <h2>Reglas de la actividad</h2>
+    <ul class="reglas-lista">
+      <li><b>Objetivo:</b> consigue al menos <b>${ini.objetivo || 6} ★</b> (hay ${total || 18} en juego). Las misiones de ★ son las más sencillas y las de ★★★, las más difíciles. Elige libremente cuáles haces.</li>
+      ${PRACTICA
+        ? '<li><b>Repite cuando quieras.</b> Cada intento trae <b>datos nuevos</b> y cuenta tu mejor resultado. Una misión empezada hay que entregarla (aunque sea en blanco) antes de hacer otra.</li>'
+        : '<li><b>Un solo intento por misión.</b> Una misión empezada no se puede abandonar: si cierras la página, te esperará en curso al volver.</li>'}
+      <li><b>Estrellas según la precisión</b> de tu resultado (error relativo):
+        <div class="reglas-escala">
+          <span><b>&lt; 5 %</b>todas</span><span><b>&lt; 10 %</b>una menos</span><span><b>&lt; 25 %</b>dos menos</span><span class="cero"><b>Más, signo mal o en blanco</b>0 ★</span>
+        </div></li>
+      <li><b>Predicción:</b> antes de calcular tendrás que predecir qué pasará. No puntúa: la comprobarás al final.</li>
+      <li><b>Resultados en notación científica</b> (mantisa y exponente) y en las unidades que se piden.</li>
+      <li><b>Sin pistas durante la misión.</b> Al terminar verás la resolución completa y, si te equivocas, un diagnóstico del error.</li>
+      ${PRACTICA
+        ? '<li><b>Tu partida se guarda en este navegador.</b> Para empezar de cero, usa el botón <b>Nueva partida</b> de la barra.</li>'
+        : '<li><b>Clasificación:</b> en clase se proyecta el <b>puente de mando</b> con la tripulación ordenada por estrellas (si hay empate, va delante quien llegó antes). Solo aparece tu indicativo.</li>'}
+      <li>Las acciones importantes (despegar, entregar…) se confirman <b>manteniendo pulsado</b> el botón.</li>
+    </ul>`, [{ texto: primeraVez ? '¡Entendido, a por ellas!' : 'Cerrar', valor: true }], 'modal-ancha');
+}
+
+/* ------------------------------ Panel ------------------------------ */
+/* Registro de misiones con forma de tablet sujeta por dos manos 3D.    */
+
+function loreProvisional(m) {
+  return [
+    m.resumen,
+    'Aquí irá el briefing completo de la misión: el contexto, quién te la encarga desde Control de Misión y qué está en juego. Se redactará cuando la misión tenga su simulador definitivo.'
+  ];
+}
+
+/** Orden alfabético (sin categorías ni niveles): el alumnado tiene que buscar la misión que quiere. */
+/** Orden alfabético (sin categorías ni niveles), con las completadas apiladas al final. */
+function misionesOrdenadas() {
+  const comparar = new Intl.Collator('es', { sensitivity: 'base', ignorePunctuation: true }).compare;
+  const hecha = m => (m.estado === 'hecha' ? 1 : 0);
+  return E.inicio.catalogo.slice().sort((a, b) => hecha(a) - hecha(b) || comparar(a.titulo, b.titulo));
+}
+
+/** Las completadas no se pueden seleccionar (en modo práctica, sí: se repiten con datos nuevos). */
+const seleccionable = m => PRACTICA || m.estado !== 'hecha';
+
+function pantallaPanel() {
+  limpiarVista();
+  const ini = E.inicio;
+  pintarBarra();
+  const orden = misionesOrdenadas();
+  if (!orden.some(m => m.id === E.seleccion && seleccionable(m))) {
+    const elegida = orden.find(m => m.estado === 'curso') || orden.find(seleccionable);
+    E.seleccion = elegida ? elegida.id : null;
+  }
+
+  const primeraHecha = orden.findIndex(m => !seleccionable(m));
+  const lista = orden.map((m, i) => (i === primeraHecha ? '<div class="lista-sep">Completadas</div>' : '') + itemLista(m)).join('');
+
+  app.innerHTML = `
+    <section class="quest">
+      <div class="quest-escena" id="quest-escena">
+        <div class="manos-capa manos-atras" id="manos-atras" aria-hidden="true"></div>
+        <div class="tablet" id="tablet">
+          <span class="goma g1"></span><span class="goma g2"></span><span class="goma g3"></span><span class="goma g4"></span>
+          <span class="tornillo t1"></span><span class="tornillo t2"></span><span class="tornillo t3"></span><span class="tornillo t4"></span>
+          <span class="tablet-camara"></span>
+          <div class="pantalla">
+            <header class="pantalla-cab">
+              <div class="pantalla-titulo">Registro de misiones</div>
+              ${ini.estrellas >= ini.objetivo ? '<div class="pantalla-ok">Objetivo cumplido</div>' : ''}
+              <div class="pantalla-iconos">
+                <b class="pantalla-hora" id="reloj">--:--:--</b>
+                <svg class="ico-senal" aria-hidden="true" viewBox="0 0 20 14"><rect x="1" y="9" width="4" height="4"/><rect x="8" y="5" width="4" height="8"/><rect x="15" y="1" width="4" height="12"/></svg>
+                <svg class="ico-bateria" aria-hidden="true" viewBox="0 0 30 14"><rect class="carcasa" x="1" y="1" width="24" height="12" rx="2"/><rect class="borne" x="26" y="4.5" width="3" height="5" rx="1"/><rect class="carga" x="3.5" y="3.5" width="15" height="7" rx="1"/></svg>
+              </div>
+            </header>
+            <div class="pantalla-cuerpo">
+              <nav class="lista" id="lista" aria-label="Misiones">${lista}</nav>
+              <article class="ficha" id="ficha" aria-live="polite"></article>
+            </div>
+          </div>
+          <div class="tablet-marca">MC-7 · Terminal de misión</div>
+        </div>
+        <div class="manos-capa manos-delante" id="manos-delante" aria-hidden="true"></div>
+      </div>
+    </section>`;
+
+  document.body.classList.add('vista-panel');
+  pintarFicha();
+  cargarImagenes();
+  E.densidad = new ResizeObserver(ajustarDensidad);
+  E.densidad.observe($('.pantalla-cuerpo'));
+
+  const listaEl = $('#lista');
+  listaEl.querySelectorAll('.lista-item').forEach(el => el.addEventListener('click', () => seleccionar(el.dataset.id, false)));
+  listaEl.addEventListener('keydown', ev => {
+    if (ev.key !== 'ArrowDown' && ev.key !== 'ArrowUp') return;
+    ev.preventDefault();
+    const ids = orden.filter(seleccionable).map(m => m.id);
+    const i = ids.indexOf(E.seleccion) + (ev.key === 'ArrowDown' ? 1 : -1);
+    if (i >= 0 && i < ids.length) seleccionar(ids[i], true);
+  });
+  const sel = listaEl.querySelector('.lista-item.sel');
+  if (sel) sel.scrollIntoView({ block: 'nearest' });
+
+  // tooltip con el resultado de las misiones completadas (ratón y teclado)
+  const conTip = ev => ev.target.closest && ev.target.closest('.lista-item[data-tip]');
+  listaEl.addEventListener('pointerover', ev => { const el = conTip(ev); if (el) mostrarTip(el); });
+  listaEl.addEventListener('pointerout', ev => { if (conTip(ev) && !conTip(ev).contains(ev.relatedTarget)) ocultarTip(); });
+  listaEl.addEventListener('focusin', ev => { const el = conTip(ev); el ? mostrarTip(el) : ocultarTip(); });
+  listaEl.addEventListener('focusout', ocultarTip);
+  listaEl.addEventListener('scroll', ocultarTip, { passive: true });
+
+  // hora de a bordo
+  const reloj = $('#reloj');
+  const tic = () => {
+    if (!reloj.isConnected) return clearInterval(E.relojId);
+    reloj.textContent = new Date().toLocaleTimeString('es-ES', { hour12: false });
+  };
+  clearInterval(E.relojId);
+  E.relojId = setInterval(tic, 1000);
+  tic();
+
+
+  // manos 3D (solo en pantallas anchas)
+  if (window.matchMedia('(min-width: 861px)').matches) {
+    const tablet = $('#tablet');
+    E.manos = crearManosTablet($('#manos-atras'), $('#manos-delante'),
+      { traje: (ini.avatar || AVATAR_DEFECTO).traje, casco: (ini.avatar || AVATAR_DEFECTO).casco },
+      () => ({ x: tablet.offsetLeft, y: tablet.offsetTop, w: tablet.offsetWidth, h: tablet.offsetHeight }));
+  }
+}
+
+/** Pide las imágenes de las misiones una sola vez (en segundo plano) y repinta la ficha al llegar. */
+function cargarImagenes() {
+  if (E.promImagenes) return E.promImagenes;
+  E.imagenes = 'cargando';
+  E.promImagenes = llamar('getImagenes')
+    .then(mapa => {
+      E.imagenes = mapa || {};
+      // descodificarlas ya: al abrir la ficha se pintan sin esperar
+      return Promise.all(Object.values(E.imagenes).map(src => {
+        const im = new Image(); im.src = src;
+        return im.decode ? im.decode().catch(() => {}) : null;
+      }));
+    })
+    .catch(() => { E.imagenes = {}; })
+    .then(() => { if ($('#ficha')) pintarFicha(); });
+  return E.promImagenes;
+}
+
+/** Si la ficha no cabe en la pantalla de la tablet, se compacta (en dos pasos). La lista se desplaza. */
+function ajustarDensidad() {
+  ['#ficha'].forEach(sel => {
+    const el = $(sel);
+    if (!el) return;
+    el.classList.remove('compacta', 'muy-compacta');
+    if (el.scrollHeight > el.clientHeight + 1) el.classList.add('compacta');
+    if (el.scrollHeight > el.clientHeight + 1) el.classList.add('muy-compacta');
+  });
+}
+
+function itemLista(m) {
+  let estado;
+  if (m.estado === 'hecha') estado = `<span class="li-hecha"><span class="dificultad">${dificultad(m.obtenidas, m.estrellas)}</span></span>`;
+  else if (m.estado === 'curso') estado = '<span class="li-curso">En curso</span>';
+  else estado = `<span class="li-estrellas dificultad" title="${m.estrellas} ${m.estrellas === 1 ? 'estrella' : 'estrellas'}">${dificultad(m.estrellas)}</span>`;
+  const sel = m.id === E.seleccion;
+  const bloqueada = !seleccionable(m);
+  // resultado de una misión completada: todas las estrellas, algunas o ninguna
+  const resultado = m.estado !== 'hecha' ? '' : m.obtenidas >= m.estrellas ? 'exito' : m.obtenidas > 0 ? 'parcial' : 'fallo';
+  return `
+    <button type="button" class="lista-item ${m.estado} ${resultado} ${sel ? 'sel' : ''}" data-id="${m.id}" aria-current="${sel}"
+      ${bloqueada ? 'aria-disabled="true" data-tip' : ''}>
+      <span class="li-icono">${bloqueada ? { exito: '✓', parcial: '◐', fallo: '✕' }[resultado] : iconoMision(m)}</span>
+      <span class="li-texto"><span class="li-titulo">${esc(m.titulo)}</span><span class="li-codigo">MSN-${m.id}</span></span>
+      ${estado}
+    </button>`;
+}
+
+/** Tooltip HUD junto a una misión completada: resultado, estrellas conseguidas y aviso de bloqueo. */
+function mostrarTip(el) {
+  const m = E.inicio.catalogo.find(x => x.id === el.dataset.id);
+  if (!m) return;
+  const resultado = m.obtenidas >= m.estrellas ? 'exito' : m.obtenidas > 0 ? 'parcial' : 'fallo';
+  colocarTip(el, resultado, `
+    <div class="tip-cab"><span class="tip-icono">${{ exito: '✓', parcial: '◐', fallo: '✕' }[resultado]}</span>
+      ${{ exito: 'Misión completada', parcial: 'Éxito parcial', fallo: 'Misión fallida' }[resultado]}</div>
+    <div class="tip-estrellas dificultad">${dificultad(m.obtenidas, m.estrellas)}</div>
+    <div class="tip-texto">${m.obtenidas} de ${m.estrellas} ${m.estrellas === 1 ? 'estrella' : 'estrellas'}</div>
+    <div class="tip-pie">Registro cerrado · sin más intentos</div>`);
+}
+
+/** Tooltip HUD de ayuda para cualquier elemento con data-ayuda="texto". */
+function mostrarAyuda(el) {
+  colocarTip(el, 'ayuda', `<div class="tip-texto">${esc(el.dataset.ayuda)}</div>`);
+}
+document.addEventListener('pointerover', ev => { const el = ev.target.closest && ev.target.closest('[data-ayuda]'); if (el) mostrarAyuda(el); });
+document.addEventListener('pointerout', ev => {
+  const el = ev.target.closest && ev.target.closest('[data-ayuda]');
+  if (el && !el.contains(ev.relatedTarget)) ocultarTip();
+});
+
+/** Crea (una sola vez) el tooltip, le pone el contenido y lo sitúa a la derecha del elemento. */
+function colocarTip(el, clase, html) {
+  let tip = $('#tip');
+  if (!tip) {
+    tip = document.createElement('div');
+    tip.id = 'tip';
+    tip.setAttribute('role', 'tooltip');
+    document.body.appendChild(tip);
+  }
+  tip.className = `tip ${clase}`;
+  tip.innerHTML = html;
+  el.setAttribute('aria-describedby', 'tip');
+  // a la derecha del elemento, centrado en vertical y sin salirse de la ventana
+  const r = el.getBoundingClientRect();
+  const t = tip.getBoundingClientRect();
+  const top = Math.min(Math.max(8, r.top + r.height / 2 - t.height / 2), innerHeight - t.height - 8);
+  tip.style.left = `${Math.min(r.right + 12, innerWidth - t.width - 8)}px`;
+  tip.style.top = `${top}px`;
+  tip.style.setProperty('--flecha', `${r.top + r.height / 2 - top}px`);
+  tip.classList.add('visible');
+}
+
+function ocultarTip() {
+  const tip = $('#tip');
+  if (tip) tip.classList.remove('visible');
+}
+
+function seleccionar(id, enfocar) {
+  const m = E.inicio.catalogo.find(x => x.id === id);
+  if (!m || !seleccionable(m)) return;
+  E.seleccion = id;
+  app.querySelectorAll('.lista-item').forEach(el => {
+    const s = el.dataset.id === id;
+    el.classList.toggle('sel', s);
+    el.setAttribute('aria-current', s);
+    if (s) { el.scrollIntoView({ block: 'nearest' }); if (enfocar) el.focus(); }
+  });
+  pintarFicha();
+  if (window.matchMedia('(max-width: 860px)').matches) $('#ficha').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function pintarFicha() {
+  const m = E.inicio.catalogo.find(x => x.id === E.seleccion);
+  const ficha = $('#ficha');
+  if (!m) {
+    ficha.innerHTML = `
+      <div class="ficha-vacia">
+        <div class="ficha-icono">🏁</div>
+        <h2 class="ficha-titulo">Registro completado</h2>
+        <p>Has completado todas las misiones disponibles. ¡Buen trabajo, tripulante!</p>
+      </div>`;
+    return;
+  }
+  const n = m.estrellas, preg = n === 1 ? 'pregunta' : 'preguntas';
+  const otraEnCurso = E.inicio.enCurso && E.inicio.enCurso !== m.id;
+  const estadoTxt = { hecha: 'Completada', curso: 'En curso', pendiente: 'Disponible' }[m.estado];
+  const imagen = (E.imagenes && E.imagenes !== 'cargando' && E.imagenes[m.id]) || m.imagen || null;
+
+  let accion;
+  const repetir = PRACTICA && m.estado === 'hecha';
+  const textoDespegar = repetir ? 'Mantén para repetir' : 'Mantén para despegar';
+  if (m.estado === 'hecha' && !PRACTICA) {
+    accion = `<div class="ficha-resultado">Misión completada · <b>${dificultad(m.obtenidas, m.estrellas)}</b> ${m.obtenidas} de ${n} ${n === 1 ? 'estrella' : 'estrellas'}</div>`;
+  } else if (m.estado === 'curso') {
+    accion = '<button id="btn-ficha" class="btn-hud principal" type="button">Continuar misión ▸</button>';
+  } else if (otraEnCurso) {
+    accion = '<div class="ficha-aviso">Tienes otra misión en curso. Termínala antes de empezar esta.</div>';
+  } else {
+    accion = (repetir ? `<div class="ficha-resultado">Mejor resultado · <b>${dificultad(m.obtenidas, m.estrellas)}</b> ${m.obtenidas} de ${n} ${n === 1 ? 'estrella' : 'estrellas'}</div>` : '') + `
+      <button id="btn-ficha" class="btn-hud btn-mantener" type="button" aria-label="Mantén pulsado para ${repetir ? 'repetir' : 'despegar'}">
+        <span class="relleno"></span>
+        <svg class="icono" viewBox="0 0 20 20" aria-hidden="true"><polygon points="10,1 19,10 10,19 1,10" fill="none" stroke="currentColor" stroke-width="2"/><polygon points="10,6 14,10 10,14 6,10" fill="currentColor"/></svg>
+        <span class="txt">${textoDespegar}</span>
+      </button>`;
+  }
+
+  ficha.innerHTML = `
+    <div class="ficha-cab">
+      <span class="ficha-icono">${iconoMision(m)}</span>
+      <div>
+        <div class="ficha-codigo">MSN-${m.id} · <span class="estado-${m.estado}">${estadoTxt}</span></div>
+        <h2 class="ficha-titulo">${esc(m.titulo)}</h2>
+        <div class="dificultad">${dificultad(n)}</div>
+      </div>
+    </div>
+    <div class="ficha-contenido">
+      <div class="ficha-texto">
+        <section>
+          <div class="ficha-seccion">Briefing ${m.lore ? '' : '<span class="provisional">Provisional</span>'}</div>
+          <div class="lore ${m.lore ? 'definitivo' : ''}">${(m.lore || loreProvisional(m)).map(p => `<p>${esc(p)}</p>`).join('')}</div>
+        </section>
+        <section>
+          <div class="ficha-seccion">Objetivos</div>
+          <ul class="objetivos">
+            <li>${esc(m.objetivo || 'Resolver ' + n + ' ' + preg)}</li>
+          </ul>
+        </section>
+      </div>
+      <figure class="ficha-imagen">${imagen
+        ? `<img src="${imagen}" alt="">`
+        : `<div class="imagen-hueco"><span class="imagen-hueco-icono">${iconoMision(m)}</span><span>${E.imagenes === 'cargando' ? 'Cargando…' : 'Imagen ilustrativa'}</span>${E.imagenes === 'cargando' ? '' : '<small>600 × 800 px</small>'}</div>`}</figure>
+    </div>
+    <div class="ficha-accion">${accion}</div>`;
+
+  ajustarDensidad();
+  const boton = $('#btn-ficha');
+  if (!boton) return;
+  if (m.estado === 'curso') { boton.addEventListener('click', () => abrirMision(m.id)); return; }
+  const txt = boton.querySelector('.txt');
+  botonMantener(boton, 900, async () => {
+    const si = await modal(`
+      <div class="modal-kicker">MSN-${m.id} · Confirmar despegue</div>
+      <h2 class="titulo-con-icono">${iconoMision(m)} ${esc(m.titulo)}</h2>
+      ${PRACTICA
+        ? `<div class="modal-aviso">Una vez que despegues <b>tendrás que entregarla</b> (aunque sea en blanco) antes de hacer otra. Después podrás repetirla ${repetir ? 'otra vez' : ''} con <b>datos nuevos</b>: cuenta tu mejor resultado.</div>`
+        : '<div class="modal-aviso">Una vez que despegues <b>no podrás abandonar la misión</b> ni hacer otra hasta terminarla, y solo tendrás <b>un intento</b>.</div>'}`,
+      [{ texto: 'Cancelar', clase: 'btn-sec', valor: false }, { texto: 'Despegar', valor: true }]);
+    if (si) abrirMision(m.id); else pintarFicha();
+  }, () => {
+    txt.textContent = 'Mantén pulsado…';
+    clearTimeout(boton._t);
+    boton._t = setTimeout(() => { txt.textContent = textoDespegar; }, 1400);
+  });
+}
+
+async function abrirMision(id) {
+  pantallaCarga('Preparando la misión');
+  try {
+    const mision = await llamar('empezarMision', id);
+    E.inicio.enCurso = id;
+    const c = E.inicio.catalogo.find(x => x.id === id);
+    if (c) c.estado = 'curso';
+    pintarBarra();
+    pantallaMision(mision);
+  } catch (err) {
+    aviso(mensajeError(err));
+    pantallaPanel();
+  }
+}
+
+/* ----------------------------- Misión ------------------------------ */
+
+function pantallaMision(m) {
+  if (m.tipo === 'ascenso') return pantallaAscenso(m);
+  if (m.tipo === 'acoplamiento') return pantallaAcoplamiento(m);
+  if (m.tipo === 'despegue') return pantallaDespegue(m);
+  if (m.tipo === 'exoplaneta') return pantallaExoplaneta(m);
+  if (m.tipo === 'cajanegra') return pantallaCajaNegra(m);
+  if (m.tipo === 'estacionaria') return pantallaEstacionaria(m);
+  if (m.tipo === 'kepler') return pantallaKepler(m);
+  if (m.tipo === 'factura') return pantallaFactura(m);
+  if (m.tipo === 'trafico') return pantallaTrafico(m);
+  limpiarVista();
+  E.mision = m;
+  const b = bloque(m.bloque);
+  const datos = m.datos.length ? `
+      <h3 class="datos-tit">Datos</h3>
+      <ul class="datos">${m.datos.map(d => `<li><span>${esc(d.nombre)}</span><span>\\(${d.tex}\\)</span></li>`).join('')}</ul>` : '';
+  const tabla = m.tabla ? `
+      <table class="tabla-datos">
+        <thead><tr>${m.tabla.cabecera.map(c => `<th>${esc(c)}</th>`).join('')}</tr></thead>
+        <tbody>${m.tabla.filas.map(f => `<tr>${f.map((c, i) => `<td>${i ? `\\(${c}\\)` : esc(c)}</td>`).join('')}</tr>`).join('')}</tbody>
+      </table>` : '';
+  const hayNum = m.preguntas.some(p => p.tipo !== 'opcion');
+
+  app.innerHTML = `
+    <section class="mision">
+      <div class="mision-cab">
+        <span class="mision-icono">${iconoMision(m)}</span>
+        <div>
+          <h1>${esc(m.titulo)}</h1>
+          <div class="mision-meta">
+            <span class="etiqueta-bloque" style="background:${b.color}">${esc(b.nombre)}</span>
+            <span class="dificultad">${dificultad(m.estrellas)}</span>
+          </div>
+        </div>
+        <span class="en-curso">🔒 Misión en curso · no se puede abandonar</span>
+      </div>
+      <div class="mision-grid">
+        <div class="panel-caja">
+          <p class="historia">${esc(m.historia)}</p>
+          ${datos}
+          ${tabla}
+          ${m.sim ? '<div id="sim" class="sim"></div>' : ''}
+        </div>
+        <div id="zona-respuestas">
+          <form id="form-respuestas" class="panel-caja" autocomplete="off" novalidate>
+            ${hayNum ? '<p class="ayuda-formato">Escribe cada resultado en notación científica: mantisa (con coma o punto) y exponente de 10. Si no hace falta exponente, déjalo en blanco. Ejemplo: 3,58 · 10<sup>7</sup>.</p>' : ''}
+            ${m.preguntas.map((p, i) => pregunta(p, i)).join('')}
+            <div class="enviar-zona"><button class="btn btn-grande" type="submit">Enviar respuestas</button></div>
+          </form>
+        </div>
+      </div>
+    </section>`;
+
+  renderMates(app);
+  if (m.sim) E.sim = crearSim($('#sim'), m.sim);
+
+  const form = $('#form-respuestas');
+  form.querySelectorAll('.entrada').forEach(ent => {
+    const i = Number(ent.dataset.i);
+    const actualizar = () => vistaPrevia(i);
+    ent.querySelectorAll('input').forEach(inp => inp.addEventListener('input', actualizar));
+  });
+  form.addEventListener('submit', ev => { ev.preventDefault(); confirmarEntrega(); });
+}
+
+function pregunta(p, i) {
+  let cuerpo;
+  if (p.tipo === 'opcion') {
+    cuerpo = `<div class="opciones">${p.opciones.map((o, j) => `
+      <label class="opcion"><input type="radio" name="p${i}" value="${j}"><span>${esc(o)}</span></label>`).join('')}</div>`;
+  } else {
+    cuerpo = `
+      <div class="entrada" data-i="${i}">
+        <input class="in-mantisa" id="m${i}" inputmode="decimal" placeholder="mantisa" aria-label="Mantisa">
+        <span class="por-diez">· 10<sup>□</sup></span>
+        <input class="in-exp" id="e${i}" inputmode="numeric" placeholder="exp." aria-label="Exponente">
+        <span class="unidad">${esc(p.unidad)}</span>
+      </div>
+      <div class="vista-previa" id="vp${i}"></div>`;
+  }
+  return `
+    <div class="pregunta">
+      <div class="pregunta-num">Pregunta ${i + 1} · ★</div>
+      <div class="pregunta-texto">${esc(p.texto)}</div>
+      ${cuerpo}
+    </div>`;
+}
+
+function vistaPrevia(i) {
+  const m = $('#m' + i).value, e = $('#e' + i).value;
+  const vp = $('#vp' + i);
+  if (!m.trim() && !e.trim()) { vp.textContent = ''; vp.classList.remove('error'); return; }
+  const v = leerNumeroCliente(m, e);
+  if (v === null) { vp.textContent = 'Formato no válido'; vp.classList.add('error'); return; }
+  vp.classList.remove('error');
+  vp.textContent = 'Tu respuesta: ' + formatoNum(v, Math.max(3, m.replace(/[^0-9]/g, '').length)) + ' ' + E.mision.preguntas[i].unidad;
+}
+
+function leerRespuestas() {
+  return E.mision.preguntas.map((p, i) => {
+    if (p.tipo === 'opcion') {
+      const el = document.querySelector(`input[name="p${i}"]:checked`);
+      return { opcion: el ? Number(el.value) : null };
+    }
+    return { m: $('#m' + i).value.trim(), e: $('#e' + i).value.trim() };
+  });
+}
+
+async function confirmarEntrega() {
+  const m = E.mision;
+  const resp = leerRespuestas();
+  const faltan = [];
+  const resumen = resp.map((r, i) => {
+    const p = m.preguntas[i];
+    if (p.tipo === 'opcion') {
+      if (r.opcion === null) faltan.push(i + 1);
+      return `<li>${esc(p.texto)}: <b>${r.opcion === null ? '—' : esc(p.opciones[r.opcion])}</b></li>`;
+    }
+    const v = leerNumeroCliente(r.m, r.e);
+    if (v === null) faltan.push(i + 1);
+    return `<li>${esc(p.texto)}: <b>${v === null ? '—' : formatoNum(v, Math.max(3, r.m.replace(/[^0-9]/g, '').length)) + ' ' + esc(p.unidad)}</b></li>`;
+  });
+  if (faltan.length) {
+    aviso('Revisa ' + (faltan.length > 1 ? 'las preguntas ' : 'la pregunta ') + faltan.join(', ') + ': falta la respuesta o el formato no es válido.');
+    return;
+  }
+  const si = await modal(`
+    <h2>¿Enviar respuestas?</h2>
+    <p>Solo tienes un intento. Comprueba los valores y las unidades:</p>
+    <ul class="modal-lista">${resumen.join('')}</ul>`,
+    [{ texto: 'Revisar', clase: 'btn-sec', valor: false }, { texto: 'Enviar definitivamente', valor: true }]);
+  if (!si) return;
+
+  const boton = document.querySelector('#form-respuestas button[type=submit]');
+  boton.disabled = true;
+  boton.textContent = 'Enviando…';
+  try {
+    const antes = E.inicio.estrellas;
+    const res = await llamar('entregarMision', m.id, resp);
+    E.inicio = res.inicio;
+    pintarBarra();
+    pantallaResultado(m, resp, res);
+    celebrar(antes, E.inicio.estrellas, E.inicio.objetivo);
+  } catch (err) {
+    aviso(mensajeError(err));
+    boton.disabled = false;
+    boton.textContent = 'Enviar respuestas';
+  }
+}
+
+function pantallaResultado(m, resp, res) {
+  const zona = $('#zona-respuestas');
+  const items = res.resultados.map((r, i) => {
+    const p = m.preguntas[i];
+    let tuya, buena;
+    if (p.tipo === 'opcion') {
+      tuya = r.respuesta === null || r.respuesta === undefined || isNaN(r.respuesta) ? '—' : esc(p.opciones[r.respuesta]);
+      buena = esc(p.opciones[r.sol]);
+    } else {
+      tuya = formatoNum(r.respuesta) + ' ' + esc(p.unidad);
+      buena = r.sol === null ? null : formatoNum(r.sol) + ' ' + esc(p.unidad);
+    }
+    return `
+      <div class="res-item ${r.correcta ? 'ok' : 'mal'}">
+        <b>${r.correcta ? '✓' : '✗'} ${esc(p.texto)}</b>
+        <div class="res-linea">Tu respuesta: ${tuya}</div>
+        ${r.correcta ? '' : `<div class="res-linea">${buena === null ? 'Este resultado es el mismo para toda la clase: pregunta a tu profesor/a cuando termine la sesión.' : 'Solución: ' + buena}</div>`}
+      </div>`;
+  }).join('');
+  const estrellas = Array.from({ length: m.estrellas }, (_, i) =>
+    `<span style="animation-delay:${0.15 + i * 0.25}s" class="${i < res.estrellas ? '' : 'apagada'}">★</span>`).join('');
+  const hayFija = res.resultados.some(r => r.sol === null);
+
+  zona.innerHTML = `
+    <div class="panel-caja">
+      <div class="resultado-cab">
+        <div class="resultado-estrellas">${estrellas}</div>
+        <div>Has conseguido <b>${res.estrellas} de ${m.estrellas}</b> ${m.estrellas === 1 ? 'estrella' : 'estrellas'}</div>
+      </div>
+      ${items}
+      ${hayFija ? '' : `<h3 class="datos-tit" style="margin-top:16px">Resolución</h3>
+      <ol class="pasos">${res.pasos.map(p => `<li>${p}</li>`).join('')}</ol>`}
+      <div class="enviar-zona" style="margin-top:16px"><button id="btn-volver" class="btn btn-grande" type="button">Volver al panel</button></div>
+    </div>`;
+  renderMates(zona);
+  $('.en-curso').textContent = '✓ Misión completada';
+  if (E.sim) E.sim.mostrarResultado(resp);
+  $('#btn-volver').addEventListener('click', pantallaPanel);
+  zona.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+/* ------------------------- Editor de avatar ------------------------ */
+
+// Iconos de línea (24×24) para las pestañas del editor
+const ICONOS_AVATAR = {
+  identidad: '<rect x="3" y="5" width="18" height="14" rx="1.5"/><circle cx="9" cy="10.5" r="2.2"/><path d="M5.6 16.2c.7-1.6 1.9-2.4 3.4-2.4s2.7.8 3.4 2.4M14.5 9.5h4M14.5 13h4"/>',
+  piel: '<path d="M12 3c3.6 4.4 6 7.6 6 10.6a6 6 0 0 1-12 0C6 10.6 8.4 7.4 12 3z"/><path d="M9 14.2a3 3 0 0 0 3 3"/>',
+  pelo: '<rect x="3" y="6" width="18" height="4" rx="1"/><path d="M5.5 10v7M8.5 10v7M11.5 10v7M14.5 10v7M17.5 10v5M20 10v3"/>',
+  colorPelo: '<path d="M12 3a9 9 0 1 0 0 18c1.2 0 1.8-.8 1.8-1.7 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-.9.8-1.7 1.7-1.7H16a5 5 0 0 0 5-5c0-4-4-7.2-9-7.2z"/><circle cx="7.5" cy="11" r="1.1"/><circle cx="10.5" cy="7" r="1.1"/><circle cx="15" cy="7.5" r="1.1"/>',
+  cara: '<circle cx="12" cy="12" r="9"/><path d="M8.5 14.5c1 1.3 2.1 2 3.5 2s2.5-.7 3.5-2"/><path d="M9 9.5h.01M15 9.5h.01" stroke-width="2.6"/>',
+  traje: '<path d="M8 4h8l4 3-2 4-2-1v10H8V10l-2 1-2-4z"/><rect x="10" y="12" width="4" height="3"/>',
+  casco: '<circle cx="12" cy="11" r="8"/><path d="M7 10.5a5 4 0 0 1 10 0v1.5a5 3.2 0 0 1-10 0z"/><path d="M8 20.5h8"/>'
+};
+
+const CATEGORIAS_AVATAR = [
+  { id: 'identidad', n: 'Identidad', desc: PRACTICA
+    ? 'Tu indicativo es tu nombre de tripulante. Es obligatorio; para cambiarlo, empieza una nueva partida.'
+    : 'Tu indicativo es tu nombre en la nave y en el puente de mando (la clasificación que se proyecta en clase). Es obligatorio y no podrás cambiarlo.' },
+  { id: 'piel', n: 'Piel', tipo: 'color', desc: 'Bioescáner calibrado. Ningún tono afecta al rendimiento en misión.' },
+  { id: 'pelo', n: 'Peinado', tipo: 'forma', desc: 'Diseñado para caber dentro de un casco presurizado.' },
+  { id: 'colorPelo', n: 'Color de pelo', tipo: 'color', desc: 'Pigmentos certificados para gravedad cero.' },
+  { id: 'cara', n: 'Expresión', tipo: 'forma', desc: 'Lo que verá Control de Misión por la cámara del casco.' },
+  { id: 'traje', n: 'Traje', tipo: 'color', desc: 'Traje presurizado multicapa. El color no cambia la protección frente a la radiación.' },
+  { id: 'casco', n: 'Casco', tipo: 'color', desc: 'Visor de policarbonato con aro reforzado y baliza lateral.' }
+];
+
+/** Lo que impide confirmar el indicativo (las mismas reglas que el servidor), o '' si es válido. */
+function problemaIndicativo(texto) {
+  const s = String(texto || '').trim();
+  if (s.length < 3) return 'Escribe tu indicativo';
+  if (!/^[\p{L}\p{N}][\p{L}\p{N} ._-]*$/u.test(s)) return 'Solo letras, números y - . _';
+  return '';
+}
+
+function pantallaEditor(primeraVez) {
+  limpiarVista();
+  E.pantalla = 'editor';
+  const ini = E.inicio;
+  let cfg = Object.assign({}, AVATAR_DEFECTO, ini.avatar || (primeraVez ? avatarAleatorio() : {}));
+  let indicativo = ini.indicativo || '';
+  let pestana = primeraVez ? 'identidad' : 'piel';
+  if (!primeraVez) pintarBarra();
+  const usuario = ini.correo.split('@')[0];
+
+  app.innerHTML = `
+    <section class="mod">
+      <div class="mod-escena" id="escena-avatar">
+        <div class="esquinas"><span></span></div>
+        <div class="mod-hud mod-hud-sup">
+          <div><div class="mod-etq">Espécimen</div><div class="mod-nombre" id="hud-nombre"></div></div>
+          <div class="mod-dato">RANGO <b>${esc(rango(ini.estrellas).toUpperCase())}</b><br>ESTRELLAS <b>${ini.estrellas}/${ini.objetivo}</b></div>
+        </div>
+        <div class="mod-hud mod-hud-inf">
+          <span class="mod-rotar">⟲ Arrastra para rotar</span>
+          <span class="mod-dato">MODELO AST-2B</span>
+        </div>
+      </div>
+      <div class="mod-panel">
+        <div class="mod-cab">
+          <div class="mod-kicker">${primeraVez ? 'Nuevo tripulante detectado' : 'Terminal de tripulación'}</div>
+          <h1>Modificador de apariencia</h1>
+          <p>${primeraVez ? (PRACTICA ? 'Antes de despegar, configura tu astronauta y elige tu indicativo.' : 'Antes de despegar, configura tu astronauta. Elígelo bien: una vez confirmado, no podrás cambiarlo.') : 'Ajusta tu astronauta y confirma los cambios.'}</p>
+        </div>
+        <nav class="mod-tabs" role="tablist">
+          ${CATEGORIAS_AVATAR.map((c, i) => `
+            <button type="button" class="mod-tab" role="tab" data-pestana="${c.id}" title="${c.n}" aria-label="${c.n}">
+              <span class="mod-tab-num">0${i + 1}</span>
+              <svg class="mod-tab-ico" viewBox="0 0 24 24" aria-hidden="true">${ICONOS_AVATAR[c.id]}</svg>
+              <span class="mod-tab-txt">${c.n}</span>
+            </button>`).join('')}
+        </nav>
+        <div class="mod-cuerpo" id="mod-cuerpo" role="tabpanel"></div>
+        <div class="mod-desc" id="mod-desc"></div>
+        <div class="mod-acciones">
+          <button id="btn-azar" class="btn-hud" type="button">⟳ Aleatorizar</button>
+          ${primeraVez ? '' : '<button id="btn-cancelar" class="btn-hud" type="button">Cancelar</button>'}
+          <button id="btn-guardar" class="btn-hud btn-mantener" type="button" aria-label="Mantén pulsado para confirmar">
+            <span class="relleno"></span>
+            <svg class="icono" viewBox="0 0 20 20" aria-hidden="true"><polygon points="10,1 19,10 10,19 1,10" fill="none" stroke="currentColor" stroke-width="2"/><polygon points="10,6 14,10 10,14 6,10" fill="currentColor"/></svg>
+            <span class="txt">Mantén para confirmar</span>
+          </button>
+        </div>
+      </div>
+    </section>`;
+
+  E.editor = crearAvatar($('#escena-avatar'), cfg, { galon: 0, plataforma: true, nombre: indicativo.trim() || usuario });
+
+  const nombreHud = () => { $('#hud-nombre').textContent = (indicativo.trim() || usuario); };
+  nombreHud();
+
+  function seleccionActual(cat) {
+    if (cat.id === 'identidad') return indicativo.trim() || usuario;
+    if (cat.tipo === 'color') return (AVATAR_NOMBRES[cat.id] || {})[cfg[cat.id]] || cfg[cat.id];
+    const op = AVATAR_OPCIONES[cat.id].find(o => o.id === cfg[cat.id]);
+    return op ? op.n : '';
+  }
+
+  function pintarDesc() {
+    const cat = CATEGORIAS_AVATAR.find(c => c.id === pestana);
+    $('#mod-desc').innerHTML = `<b>${esc(seleccionActual(cat))}</b>${esc(cat.desc)}`;
+  }
+
+  function pintarPestana() {
+    const cat = CATEGORIAS_AVATAR.find(c => c.id === pestana);
+    app.querySelectorAll('.mod-tab').forEach(t => {
+      const activa = t.dataset.pestana === pestana;
+      t.classList.toggle('activa', activa);
+      t.setAttribute('aria-selected', activa);
+    });
+    const cuerpo = $('#mod-cuerpo');
+    const indice = CATEGORIAS_AVATAR.indexOf(cat) + 1;
+    let html = `<div class="mod-seccion"><span>0${indice}</span>${esc(cat.n)}</div>`;
+    if (cat.id === 'identidad') {
+      html += `<input id="in-indicativo" class="campo-hud" maxlength="20" placeholder="p. ej. Halcón-7" value="${esc(indicativo)}" aria-label="Indicativo de llamada">
+        <p class="campo-ayuda">Obligatorio · entre 3 y 20 caracteres · letras, números, espacios y - . _${PRACTICA ? '' : ' · no se podrá cambiar'}.</p>`;
+    } else if (cat.tipo === 'color') {
+      html += `<div class="hexas">${AVATAR_OPCIONES[cat.id].map(col => `
+        <button type="button" class="hexa ${cfg[cat.id] === col ? 'activa' : ''}" data-valor="${col}" aria-label="${esc(AVATAR_NOMBRES[cat.id][col] || col)}">
+          <span class="hexa-forma"><span class="hexa-color" style="background:${col}"></span></span>
+          <span class="hexa-nombre">${esc(AVATAR_NOMBRES[cat.id][col] || '')}</span>
+        </button>`).join('')}</div>`;
+    } else {
+      html += `<div class="teselas">${AVATAR_OPCIONES[cat.id].map((o, i) => `
+        <button type="button" class="tesela ${cfg[cat.id] === o.id ? 'activa' : ''}" data-valor="${o.id}">
+          <small>${cat.id === 'pelo' ? 'P' : 'E'}-0${i + 1}</small>${esc(o.n)}
+        </button>`).join('')}</div>`;
+    }
+    cuerpo.innerHTML = html;
+    pintarDesc();
+
+    if (cat.id === 'identidad') {
+      const inp = $('#in-indicativo');
+      inp.addEventListener('input', () => { indicativo = inp.value; nombreHud(); pintarDesc(); E.editor.ponerNombre(indicativo.trim() || usuario); if (E.comprobarIndicativo) E.comprobarIndicativo(); });
+    } else {
+      cuerpo.querySelectorAll('[data-valor]').forEach(el => {
+        el.addEventListener('click', () => {
+          cfg[cat.id] = el.dataset.valor;
+          E.editor.actualizar(cfg);
+          cuerpo.querySelectorAll('[data-valor]').forEach(x => x.classList.toggle('activa', x === el));
+          pintarDesc();
+        });
+      });
+    }
+  }
+
+  app.querySelectorAll('.mod-tab').forEach(t => t.addEventListener('click', () => { pestana = t.dataset.pestana; pintarPestana(); }));
+  pintarPestana();
+
+  $('#btn-azar').addEventListener('click', () => { cfg = avatarAleatorio(); E.editor.actualizar(cfg); pintarPestana(); });
+  if (!primeraVez) $('#btn-cancelar').addEventListener('click', pantallaPanel);
+
+  const boton = $('#btn-guardar');
+  const textoBoton = boton.querySelector('.txt');
+  const textoListo = () => problemaIndicativo(indicativo) || 'Mantén para confirmar';
+  // sin un indicativo válido no se puede confirmar
+  E.comprobarIndicativo = () => { boton.disabled = !!problemaIndicativo(indicativo); textoBoton.textContent = textoListo(); };
+  E.comprobarIndicativo();
+  const mantener = botonMantener(boton, 900, async () => {
+    textoBoton.textContent = 'Transmitiendo…';
+    try {
+      E.inicio = await llamar('guardarAvatar', cfg, indicativo);
+      await seguir();                                       // hangar o, si la campaña ya empezó, el panel
+      mostrarReglas(true);                                  // primer acceso: se explican las reglas una vez
+    } catch (err) {
+      aviso(mensajeError(err));
+      // si el problema es el indicativo (repetido o corto), se vuelve a su pestaña
+      if (/indicativo/i.test(mensajeError(err)) && pestana !== 'identidad') { pestana = 'identidad'; pintarPestana(); }
+      textoBoton.textContent = textoListo();
+      mantener.reiniciar();
+    }
+  }, () => {
+    textoBoton.textContent = 'Mantén pulsado…';
+    clearTimeout(boton._t);
+    boton._t = setTimeout(() => { textoBoton.textContent = textoListo(); }, 1400);
+  });
+}
+
+/**
+ * Botón de «mantener para confirmar»: hay que dejarlo pulsado `duracion` ms
+ * (ratón, dedo, Espacio o Intro). `alSoltarPronto` se llama si se suelta antes.
+ */
+function botonMantener(boton, duracion, alCompletar, alSoltarPronto) {
+  const relleno = boton.querySelector('.relleno');
+  let inicio = null, raf = null, hecho = false;
+  const pintar = p => { relleno.style.width = (p * 100) + '%'; boton.classList.toggle('activo', p > 0.5); };
+  const paso = ahora => {
+    const p = Math.min(1, (ahora - inicio) / duracion);
+    pintar(p);
+    if (p >= 1) { hecho = true; inicio = null; boton.classList.add('hecho'); alCompletar(); return; }
+    raf = requestAnimationFrame(paso);
+  };
+  const tecla = e => e.key === ' ' || e.key === 'Enter';
+  const empezar = e => {
+    if (hecho || boton.disabled || inicio !== null) return;
+    if (e.type === 'keydown' && (!tecla(e) || e.repeat)) return;
+    if (e.type === 'pointerdown' && e.button !== 0) return;
+    e.preventDefault();
+    relleno.style.transition = '';
+    inicio = performance.now();
+    raf = requestAnimationFrame(paso);
+  };
+  const soltar = e => {
+    if (hecho || inicio === null) return;
+    if (e.type === 'keyup' && !tecla(e)) return;
+    cancelAnimationFrame(raf);
+    inicio = null;
+    relleno.style.transition = 'width .25s';
+    pintar(0);
+    if (alSoltarPronto) alSoltarPronto();
+  };
+  boton.addEventListener('pointerdown', empezar);
+  boton.addEventListener('keydown', empezar);
+  ['pointerup', 'pointerleave', 'pointercancel', 'keyup', 'blur'].forEach(ev => boton.addEventListener(ev, soltar));
+  boton.addEventListener('click', e => e.preventDefault());
+  return {
+    reiniciar() { hecho = false; inicio = null; boton.classList.remove('hecho'); relleno.style.transition = ''; pintar(0); }
+  };
+}
+
+/* ------------------------------ Apuntes ---------------------------- */
+/* PDF del profesor en una ventana flotante que se arrastra por su barra de título y se redimensiona */
+/* por la esquina. Sigue abierta al cambiar de pantalla (sirve de consulta durante las misiones).    */
+
+const PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+const AP = { ventana: null, pdf: null, zoom: 1, paginas: [], obs: null, proporcion: 0.5625 };
+
+function cargarPdfJs() {
+  if (window.pdfjsLib) return Promise.resolve();
+  return new Promise((ok, mal) => {
+    const s = document.createElement('script');
+    s.src = PDFJS + 'pdf.min.js';
+    s.onload = ok;
+    s.onerror = () => mal(new Error('No se ha podido cargar el visor de PDF.'));
+    document.head.appendChild(s);
+  }).then(async () => {
+    // el visor trabaja en un worker; en la página de Apps Script hay que crearlo desde un blob
+    try {
+      const js = await (await fetch(PDFJS + 'pdf.worker.min.js')).text();
+      pdfjsLib.GlobalWorkerOptions.workerPort = new Worker(URL.createObjectURL(new Blob([js], { type: 'text/javascript' })));
+    } catch (err) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS + 'pdf.worker.min.js';
+    }
+  });
+}
+
+/** Posición y tamaño recordados (solo en este navegador). */
+function geometriaApuntes() {
+  let g = null;
+  try { g = JSON.parse(localStorage.getItem('apuntes-ventana')); } catch (err) { /* sin almacenamiento */ }
+  const w = Math.min(g ? g.w : 640, innerWidth - 16), h = Math.min(g ? g.h : 460, innerHeight - 16);
+  const x = g ? g.x : innerWidth - w - 24, y = g ? g.y : 96;
+  return { w, h, x: Math.max(8, Math.min(x, innerWidth - w - 8)), y: Math.max(8, Math.min(y, innerHeight - 48)) };
+}
+function guardarGeometriaApuntes() {
+  const r = AP.ventana.getBoundingClientRect();
+  try { localStorage.setItem('apuntes-ventana', JSON.stringify({ x: r.left, y: r.top, w: r.width, h: r.height })); } catch (err) { /* sin almacenamiento */ }
+}
+
+function abrirApuntes() {
+  if (AP.ventana) { AP.ventana.hidden = false; AP.ventana.focus(); return; }
+  const v = document.createElement('section');
+  v.className = 'apuntes';
+  v.tabIndex = -1;
+  v.setAttribute('role', 'dialog');
+  v.setAttribute('aria-label', 'Apuntes');
+  v.innerHTML = `
+    <header class="apuntes-cab" title="Arrastra para mover">
+      <svg class="apuntes-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2.5h8.5L19 7v14.5H6z"/><path d="M14.5 2.5V7H19"/><path d="M9 11h7M9 14h7M9 17h4.5"/></svg>
+      <span class="apuntes-tit">${esc(E.inicio.apuntes || 'Apuntes')}</span>
+      <span class="apuntes-pag"></span>
+      <span class="apuntes-ctrl">
+        <button type="button" data-zoom="-1" aria-label="Alejar">−</button>
+        <span class="apuntes-zoom">100 %</span>
+        <button type="button" data-zoom="1" aria-label="Acercar">+</button>
+        <button type="button" class="apuntes-cerrar" aria-label="Cerrar los apuntes">✕</button>
+      </span>
+    </header>
+    <div class="apuntes-cuerpo"><div class="apuntes-estado"><span class="pulso"></span>Descargando los apuntes…</div></div>
+    <span class="apuntes-asa" title="Arrastra para cambiar el tamaño" aria-hidden="true"></span>`;
+  document.body.appendChild(v);
+  AP.ventana = v;
+  const g = geometriaApuntes();
+  Object.assign(v.style, { left: g.x + 'px', top: g.y + 'px', width: g.w + 'px', height: g.h + 'px' });
+
+  // mover (por la barra de título) y redimensionar (por la esquina)
+  const arrastre = (zona, mover) => zona.addEventListener('pointerdown', e => {
+    if (e.button !== 0 || e.target.closest('button')) return;
+    e.preventDefault();
+    zona.setPointerCapture(e.pointerId);
+    const r = v.getBoundingClientRect(), x0 = e.clientX, y0 = e.clientY;
+    v.classList.add('arrastrando');
+    const mov = ev => mover(r, ev.clientX - x0, ev.clientY - y0);
+    const fin = () => {
+      zona.removeEventListener('pointermove', mov);
+      v.classList.remove('arrastrando');
+      guardarGeometriaApuntes();
+      if (zona.classList.contains('apuntes-asa')) repintarApuntes();
+    };
+    zona.addEventListener('pointermove', mov);
+    zona.addEventListener('pointerup', fin, { once: true });
+    zona.addEventListener('pointercancel', fin, { once: true });
+  });
+  arrastre(v.querySelector('.apuntes-cab'), (r, dx, dy) => {
+    v.style.left = Math.max(8 - r.width + 120, Math.min(r.left + dx, innerWidth - 120)) + 'px';
+    v.style.top = Math.max(0, Math.min(r.top + dy, innerHeight - 40)) + 'px';
+  });
+  arrastre(v.querySelector('.apuntes-asa'), (r, dx, dy) => {
+    v.style.width = Math.max(320, Math.min(r.width + dx, innerWidth - r.left - 4)) + 'px';
+    v.style.height = Math.max(220, Math.min(r.height + dy, innerHeight - r.top - 4)) + 'px';
+  });
+  v.querySelector('.apuntes-cerrar').onclick = () => { v.hidden = true; $('#btn-apuntes').focus(); };
+  v.querySelectorAll('[data-zoom]').forEach(b => b.onclick = () => {
+    AP.zoom = Math.max(0.6, Math.min(2.6, Math.round((AP.zoom + 0.2 * b.dataset.zoom) * 10) / 10));
+    repintarApuntes();
+  });
+  v.addEventListener('keydown', e => { if (e.key === 'Escape') { v.hidden = true; $('#btn-apuntes').focus(); } });
+  v.querySelector('.apuntes-cuerpo').addEventListener('scroll', paginaVisibleApuntes);
+  v.focus();
+  cargarApuntes();
+}
+
+async function cargarApuntes() {
+  const cuerpo = AP.ventana.querySelector('.apuntes-cuerpo');
+  try {
+    const [res] = await Promise.all([llamar('getApuntes'), cargarPdfJs()]);
+    const bytes = Uint8Array.from(atob(res.datos), c => c.charCodeAt(0));
+    AP.pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
+    const p1 = await AP.pdf.getPage(1), vp = p1.getViewport({ scale: 1 });
+    AP.proporcion = vp.height / vp.width;
+    cuerpo.innerHTML = '';
+    AP.paginas = [];
+    for (let i = 1; i <= AP.pdf.numPages; i++) {
+      const d = document.createElement('div');
+      d.className = 'apuntes-pagina';
+      d.dataset.n = i;
+      cuerpo.appendChild(d);
+      AP.paginas.push(d);
+    }
+    // solo se dibujan las páginas que se ven (y las cercanas); las que se alejan se liberan de memoria
+    AP.obs = new IntersectionObserver(es => es.forEach(e => {
+      if (e.isIntersecting) dibujarPaginaApuntes(e.target);
+      else { e.target.innerHTML = ''; e.target.dataset.ancho = ''; }
+    }), { root: cuerpo, rootMargin: '400px 0px' });
+    repintarApuntes();
+  } catch (err) {
+    cuerpo.innerHTML = `<div class="apuntes-estado error">${esc(mensajeError(err))}</div>`;
+  }
+}
+
+/** Ajusta el tamaño de las páginas al ancho de la ventana (y al zoom) y las vuelve a dibujar. */
+function repintarApuntes() {
+  if (!AP.pdf) return;
+  const cuerpo = AP.ventana.querySelector('.apuntes-cuerpo');
+  const ancho = Math.max(120, (cuerpo.clientWidth - 24) * AP.zoom);
+  AP.ventana.querySelector('.apuntes-zoom').textContent = Math.round(AP.zoom * 100) + ' %';
+  AP.paginas.forEach(d => {
+    d.style.width = ancho + 'px';
+    d.style.height = ancho * AP.proporcion + 'px';
+    d.dataset.ancho = '';
+    AP.obs.unobserve(d);
+    AP.obs.observe(d);
+  });
+  paginaVisibleApuntes();
+}
+
+async function dibujarPaginaApuntes(d) {
+  const ancho = parseFloat(d.style.width);
+  if (d.dataset.ancho === String(ancho)) return;
+  d.dataset.ancho = ancho;
+  const pagina = await AP.pdf.getPage(Number(d.dataset.n));
+  const k = Math.min(window.devicePixelRatio || 1, 2);
+  const vp = pagina.getViewport({ scale: ancho / pagina.getViewport({ scale: 1 }).width * k });
+  const cv = document.createElement('canvas');
+  cv.width = Math.round(vp.width); cv.height = Math.round(vp.height);
+  await pagina.render({ canvasContext: cv.getContext('2d'), viewport: vp }).promise;
+  if (d.dataset.ancho !== String(ancho)) return;              // mientras tanto cambió el zoom o el tamaño
+  d.innerHTML = '';
+  d.appendChild(cv);
+}
+
+function paginaVisibleApuntes() {
+  if (!AP.pdf) return;
+  const cuerpo = AP.ventana.querySelector('.apuntes-cuerpo'), medio = cuerpo.getBoundingClientRect().top + cuerpo.clientHeight / 3;
+  const actual = AP.paginas.find(d => d.getBoundingClientRect().bottom > medio) || AP.paginas[AP.paginas.length - 1];
+  AP.ventana.querySelector('.apuntes-pag').textContent = actual.dataset.n + ' / ' + AP.pdf.numPages;
+}
+
+$('#btn-apuntes').addEventListener('click', abrirApuntes);
+window.addEventListener('resize', () => {
+  if (!AP.ventana || AP.ventana.hidden) return;
+  // que la ventana no se quede fuera de la pantalla
+  const r = AP.ventana.getBoundingClientRect();
+  if (r.left > innerWidth - 120) AP.ventana.style.left = (innerWidth - 120) + 'px';
+  if (r.top > innerHeight - 40) AP.ventana.style.top = (innerHeight - 40) + 'px';
+});
+
+/* ------------------------------ Campaña ---------------------------- */
+/* El profesor la controla desde el puente: cerrada → hangar → en curso → finalizada. */
+
+/** Lleva al alumno a la pantalla que le toca según el estado de la campaña. */
+async function seguir() {
+  vigilarCampana();
+  const estado = E.inicio.campana.estado;
+  if (estado === 'cerrada') return pantallaEspera();
+  if (estado === 'finalizada') return pantallaFinal();
+  if (!E.inicio.avatar) return pantallaEditor(true);
+  if (!E.inicio.indicativo) await pedirIndicativo();
+  pintarBarra();
+  if (estado === 'hangar') return pantallaHangar();
+  if (E.inicio.campana.faltan > 0) await cuentaAtras(E.inicio.campana.faltan);
+  if (E.inicio.enCurso) return abrirMision(E.inicio.enCurso);
+  pantallaPanel();
+}
+
+// cada cuánto se pregunta por el estado: rápido mientras se espera la orden, despacio durante la campaña
+const CADA_CAMPANA = { cerrada: 5000, hangar: 3000, curso: 15000, finalizada: 30000 };
+function vigilarCampana() {
+  clearTimeout(E.vigia);
+  E.vigia = setTimeout(async () => {
+    try { await cambioCampana(await llamar('getCampana')); } catch (err) { /* sin conexión: se reintenta */ }
+    vigilarCampana();
+  }, CADA_CAMPANA[E.inicio.campana.estado] || 15000);
+}
+
+async function cambioCampana(c) {
+  const antes = E.inicio.campana.estado;
+  E.inicio.campana = c;
+  if (c.estado === antes) return;
+  if (c.estado === 'finalizada') return campanaTerminada();
+  if (E.pantalla === 'editor') {
+    // quien sigue diseñando su astronauta no se interrumpe: al confirmarlo entrará directo
+    if (c.estado === 'curso') aviso('¡La campaña ha empezado! Confirma tu astronauta para despegar.');
+    return;
+  }
+  if (E.pantalla === 'hangar' && c.estado === 'curso') {
+    await cuentaAtras(c.faltan);
+    return E.inicio.enCurso ? abrirMision(E.inicio.enCurso) : pantallaPanel();
+  }
+  // cualquier otro cambio (se abre el hangar, o el profesor reabre la campaña desde la hoja)
+  const msg = E.pantalla === 'espera' && app.querySelector('.espera-msg');
+  if (msg) msg.innerHTML = `<span class="pulso"></span>${c.estado === 'hangar' ? 'Hangar abierto · Preparando tu astronauta' : 'Conectando con Control de Misión'}`;
+  try {
+    E.inicio = await llamar('getInicio');
+  } catch (err) {
+    // si falla (p. ej. toda la clase entrando a la vez), se vuelve al estado anterior para reintentarlo en el siguiente sondeo
+    E.inicio.campana = { estado: antes, faltan: 0 };
+    throw err;
+  }
+  seguir();
+}
+
+/** El profesor ha terminado la campaña: lo que estuviera a medias se queda sin entregar. */
+async function campanaTerminada() {
+  if (E.pantalla === 'final' || E.terminando) return;
+  E.terminando = true;
+  try { E.inicio = await llamar('getInicio'); } catch (err) { /* se usa lo que ya había */ }
+  E.terminando = false;
+  E.inicio.campana = { estado: 'finalizada', faltan: 0 };
+  $('#modal').hidden = true;
+  vigilarCampana();
+  pantallaFinal();
+}
+
+async function misionRetirada() {
+  try { E.inicio = await llamar('getInicio'); } catch (err) { /* se usa lo que ya había */ }
+  pantallaPanel();
+}
+
+/** Campaña aún no iniciada: se espera a que el profesor abra el hangar. */
+function pantallaEspera() {
+  pantallaCarga('Campaña no iniciada');
+  E.pantalla = 'espera';
+  const centro = app.querySelector('.carga-centro');
+  centro.querySelector('.carga-log').remove();
+  centro.querySelector('.carga-barra').outerHTML = `
+    <div class="espera-msg"><span class="pulso"></span>Esperando a Control de Misión</div>
+    <p class="espera-nota">Tu profesor abrirá el hangar en breve. No hace falta recargar la página.</p>`;
+}
+
+/** Hangar: el astronauta ya está listo y espera la orden de despegue. */
+function pantallaHangar() {
+  limpiarVista();
+  E.pantalla = 'hangar';
+  document.body.classList.add('vista-campana');
+  const ini = E.inicio;
+  app.innerHTML = `
+    <section class="mod hangar">
+      <div class="mod-escena" id="escena-hangar">
+        <div class="esquinas"><span></span></div>
+        <div class="mod-hud mod-hud-sup">
+          <div><div class="mod-etq">Tripulante</div><div class="mod-nombre">${esc(ini.indicativo)}</div></div>
+          <div class="mod-dato">RANGO <b>${esc(rango(ini.estrellas).toUpperCase())}</b><br>ESTADO <b>EN PLATAFORMA</b></div>
+        </div>
+        <div class="mod-hud mod-hud-inf">
+          <span class="mod-rotar">⟲ Arrastra para rotar</span>
+          <span class="mod-dato">MODELO AST-2B</span>
+        </div>
+      </div>
+      <div class="mod-panel">
+        <div class="mod-cab">
+          <div class="mod-kicker">Hangar · Plataforma de lanzamiento</div>
+          <h1>Esperando orden de despegue</h1>
+          <p>Tu astronauta está listo. Las misiones se abrirán cuando Control de Misión dé la orden.</p>
+        </div>
+        <div class="mod-cuerpo">
+          <div class="hangar-estado"><span class="pulso"></span>Enlace con Control de Misión activo</div>
+          <ol class="hangar-pasos">
+            <li><b>Control de Misión</b> dará la orden cuando la tripulación esté lista.</li>
+            <li>Empezará una <b>cuenta atrás</b> en tu pantalla y se abrirán las misiones.</li>
+            <li>No hace falta recargar la página: la orden llegará sola.</li>
+          </ol>
+          <p class="hangar-nota">Mientras tanto, repasa las reglas: hay <b>un solo intento</b> por misión y las estrellas dependen de tu precisión.</p>
+        </div>
+        <div class="mod-acciones"><button id="btn-hangar-reglas" class="btn-hud principal" type="button">Repasar las reglas</button></div>
+      </div>
+    </section>`;
+  E.escena = crearAvatar($('#escena-hangar'), ini.avatar, { galon: nivelRango(ini.estrellas), plataforma: true, nombre: ini.indicativo });
+  $('#btn-hangar-reglas').addEventListener('click', () => mostrarReglas(false));
+}
+
+/** Cuenta atrás a pantalla completa (la misma que se proyecta en el puente). */
+function cuentaAtras(ms) {
+  return new Promise(res => {
+    if (!(ms > 400)) return res();
+    $('#modal').hidden = true;
+    const el = document.createElement('div');
+    el.className = 'cuenta';
+    el.innerHTML = '<div class="cuenta-kicker">Campaña iniciada · Despegue en</div><div class="cuenta-num"></div><div class="cuenta-pie">Las misiones se abren al llegar a cero</div>';
+    document.body.appendChild(el);
+    const num = el.querySelector('.cuenta-num'), fin = Date.now() + ms;
+    let previo = null;
+    (function paso() {
+      const s = Math.ceil((fin - Date.now()) / 1000);
+      if (s <= 0) {
+        num.textContent = '¡Despegue!';
+        el.classList.add('fin');
+        setTimeout(() => el.remove(), 1100);
+        return res();
+      }
+      if (s !== previo) { previo = s; num.textContent = s; num.classList.remove('late'); void num.offsetWidth; num.classList.add('late'); }
+      setTimeout(paso, 80);
+    })();
+  });
+}
+
+/** Campaña finalizada: resumen de la actividad del alumno (sin su puesto en la clasificación). */
+function pantallaFinal() {
+  limpiarVista();
+  E.pantalla = 'final';
+  const ini = E.inicio;
+  if (!ini.avatar) {
+    pantallaCarga('Campaña finalizada');
+    E.pantalla = 'final';
+    const centro = app.querySelector('.carga-centro');
+    centro.querySelector('.carga-log').remove();
+    centro.querySelector('.carga-barra').outerHTML = '<p class="espera-nota">No llegaste a unirte a la tripulación en esta campaña.</p>';
+    return;
+  }
+  pintarBarra();
+  document.body.classList.add('vista-campana');
+  const total = ini.catalogo.reduce((n, m) => n + m.estrellas, 0);
+  const nivel = nivelRango(ini.estrellas);
+  const cumplido = ini.estrellas >= ini.objetivo;
+  const orden = { hecha: 0, curso: 1, pendiente: 2 };
+  const misiones = ini.catalogo.slice().sort((a, b) => orden[a.estado] - orden[b.estado] || (b.obtenidas || 0) - (a.obtenidas || 0));
+  const estado = m => m.estado === 'hecha' ? `<span class="final-est">${dificultad(m.obtenidas, m.estrellas)}</span>`
+    : m.estado === 'curso' ? '<span class="final-txt mal">Sin entregar · 0 ★</span>' : '<span class="final-txt">No realizada</span>';
+  app.innerHTML = `
+    <section class="mod final">
+      <div class="mod-escena" id="escena-final">
+        <div class="esquinas"><span></span></div>
+        <div class="mod-hud mod-hud-sup">
+          <div><div class="mod-etq">Tripulante</div><div class="mod-nombre">${esc(ini.indicativo || ini.correo.split('@')[0])}</div></div>
+          <div class="mod-dato">CAMPAÑA <b>FINALIZADA</b><br>ESTRELLAS <b>${ini.estrellas}/${total}</b></div>
+        </div>
+        <div class="mod-hud mod-hud-inf">
+          <span class="mod-rotar">⟲ Arrastra para rotar</span>
+          <span class="mod-dato">MODELO AST-2B</span>
+        </div>
+      </div>
+      <div class="mod-panel">
+        <div class="mod-cab">
+          <div class="mod-kicker">Informe final de campaña</div>
+          <h1>Campaña finalizada</h1>
+          <p>Control de Misión ha cerrado la campaña: ya no se aceptan envíos. Este es tu informe de servicio.</p>
+        </div>
+        <div class="mod-cuerpo">
+          <div class="final-resumen">
+            <div class="final-caja"><span>Rango final</span><b class="final-rango" id="final-rango"></b></div>
+            <div class="final-caja"><span>Estrellas</span><b>${ini.estrellas} <small>/ ${total} ★</small></b></div>
+            <div class="final-caja ${cumplido ? 'ok' : 'no'}"><span>Objetivo · ${ini.objetivo} ★</span>
+              <b>${cumplido ? '✓ Cumplido' : '✗ No cumplido'}</b>${cumplido ? '' : `<small>Te faltaron ${ini.objetivo - ini.estrellas} ★</small>`}</div>
+          </div>
+          <div class="mod-seccion"><span>01</span>Misiones</div>
+          <ul class="final-misiones">${misiones.map(m => `
+            <li class="${m.estado}">${iconoMision(m)}<span class="final-tit">${esc(m.titulo)}</span>${estado(m)}</li>`).join('')}
+          </ul>
+        </div>
+      </div>
+    </section>`;
+  const r = $('#final-rango');
+  r.appendChild(lienzoGalon(nivel, 20, 24));
+  r.appendChild(document.createTextNode(rango(ini.estrellas)));
+  E.escena = crearAvatar($('#escena-final'), ini.avatar, { galon: nivel, plataforma: true, nombre: ini.indicativo || '' });
+}
+
+/* ------------------------------ Arranque --------------------------- */
+
+async function arrancar() {
+  pantallaCarga();
+  const t0 = Date.now();
+  const esperarHasta = ms => new Promise(r => setTimeout(r, Math.max(0, ms - (Date.now() - t0))));
+  const subtitulo = t => { const sub = app.querySelector('.carga-sub'); if (sub) sub.textContent = t; };
+  const imagenes = cargarImagenes();                   // en paralelo con los datos del alumno
+  try {
+    E.inicio = await llamar('getInicio');
+    const estado = E.inicio.campana.estado;
+    if (!E.inicio.avatar && (estado === 'hangar' || estado === 'curso')) {
+      // Primera entrada: el salto al hiperespacio dura al menos 10 s
+      setTimeout(() => {
+        const sub = app.querySelector('.carga-sub');
+        if (sub) { sub.textContent = 'Nuevo tripulante detectado'; sub.style.color = 'var(--hud-ambar)'; }
+      }, Math.max(0, 8000 - (Date.now() - t0)));
+      await esperarHasta(10000);
+      return seguir();
+    }
+    if (E.inicio.avatar) {
+      // visor del astronauta e imágenes de las misiones (como mucho 8 s; si no, siguen llegando en segundo plano)
+      subtitulo('Calibrando tu traje');
+      prepararPopAvatar();
+      subtitulo('Descargando cartografía de misiones');
+      await Promise.race([imagenes, new Promise(r => setTimeout(r, 8000))]);
+    }
+    await esperarHasta(1600); // que el salto se vea aunque el servidor responda rápido
+    seguir();
+  } catch (err) {
+    app.innerHTML = `<div class="panel-caja error-total"><h2>No se ha podido conectar</h2><p>${esc(mensajeError(err))}</p>
+      <button class="btn" type="button" onclick="arrancar()">Reintentar</button></div>`;
+  }
+}
+arrancar();
+</script>

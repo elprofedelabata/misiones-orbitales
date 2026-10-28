@@ -1,0 +1,379 @@
+<style>
+  /* =================================================================
+   * Misión «Factura energética»: lanzamiento, barras de energía y factura
+   * (reutiliza los estilos de la consola de «Ascenso orbital»)
+   * ================================================================= */
+  .vista-ficha-fac { top: 16px; right: 22px; text-align: right; }
+  .vista-ficha-fac .fase { font: 600 13px 'Chakra Petch', sans-serif; letter-spacing: 0.18em; text-transform: uppercase; color: var(--hud-ambar); }
+  .barras-fac { position: absolute; z-index: 2; left: 20px; bottom: 54px; width: 230px; padding: 10px 12px 10px;
+    background: rgba(5, 8, 17, 0.75); border: 1px solid var(--hud-linea); pointer-events: none; }
+  .barras-fac .tit { font: 600 10.5px 'Chakra Petch', sans-serif; letter-spacing: 0.2em; text-transform: uppercase; color: rgba(220,235,255,0.6); margin-bottom: 8px; }
+  .barra-fac { margin-bottom: 8px; }
+  .barra-fac:last-child { margin-bottom: 0; }
+  .barra-fac .etq { display: flex; justify-content: space-between; font: 11.5px 'Share Tech Mono', monospace; color: rgba(220,235,255,0.75); margin-bottom: 3px; }
+  .barra-fac .pista { height: 9px; border: 1px solid var(--hud-linea-fuerte); padding: 1px; }
+  .barra-fac .pista i { display: block; height: 100%; width: 0; }
+  .barra-fac.ep .pista i { background: var(--hud-magenta); box-shadow: 0 0 8px rgba(255,61,127,0.5); }
+  .barra-fac.ec .pista i { background: var(--hud-cian); box-shadow: 0 0 8px rgba(63,224,255,0.5); }
+  /* factura impresa */
+  .factura { position: absolute; z-index: 3; top: 50%; left: 50%; width: min(330px, 80%); transform: translate(-50%, -50%);
+    padding: 16px 18px 14px; background: #f4f1e8; color: #1c1a16; font: 12.5px 'Share Tech Mono', monospace;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.6); clip-path: inset(0 0 100% 0); transition: clip-path 1.4s steps(18); }
+  .factura.impresa { clip-path: inset(0 0 0 0); }
+  .factura h3 { margin: 0 0 2px; font: 700 15px 'Chakra Petch', sans-serif; letter-spacing: 0.16em; text-transform: uppercase; }
+  .factura .sub { color: #6b665a; margin-bottom: 10px; }
+  .factura table { width: 100%; border-collapse: collapse; }
+  .factura td { padding: 4px 0; border-bottom: 1px dashed #c9c2b0; }
+  .factura td:last-child { text-align: right; }
+  .factura tr.total td { border-bottom: 0; border-top: 2px solid #1c1a16; padding-top: 7px; font-weight: 700; font-size: 14px; }
+  .factura .pie { margin-top: 10px; color: #6b665a; font-size: 11px; }
+  .factura .pie b { color: #1c1a16; }
+  .factura .pie .ok { color: #1d7a45; } .factura .pie .mal { color: #b3203f; }
+</style>
+<script>
+/* =====================================================================
+ * Misión «Factura energética»: energía mínima para poner un satélite en
+ * órbita desde la superficie, pasada a kWh y a euros.
+ * ===================================================================== */
+
+function pantallaFactura(m) {
+  limpiarVista();
+  E.mision = m;
+  document.body.classList.add('vista-consola');
+  const s = m.escena;
+  const claveP = 'prediccion-' + m.id;
+  let prediccion = null;
+  try { prediccion = sessionStorage.getItem(claveP); } catch (e) { /* sin almacenamiento */ }
+  const km = n => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+
+  app.innerHTML = `
+    <section class="consola">
+      <header class="consola-cab">
+        <span class="consola-icono">${iconoMision(m)}</span>
+        <div>
+          <div class="consola-kicker">MSN-${m.id} · Presupuesto de lanzamiento</div>
+          <h1>${esc(m.titulo)}</h1>
+        </div>
+        <span class="dificultad">${dificultad(m.estrellas)}</span>
+        <span class="en-curso">🔒 Misión en curso · no se puede abandonar</span>
+      </header>
+      <div class="consola-cuerpo">
+        <div class="consola-vista" id="vista">
+          <div class="esquinas"><span></span></div>
+          <div class="vista-hud vista-telemetria">
+            <div class="hud-nombre">Satélite</div>
+            <div class="hud-dato">MASA <b>${km(s.m)} kg</b></div>
+            <div class="hud-dato">ALTURA DE LA ÓRBITA <b>${km(s.h)} km</b></div>
+            <div class="hud-dato">PRECIO DE LA ENERGÍA <b>${fijo(s.precio, 2)} €/kWh</b></div>
+          </div>
+          <div class="vista-hud vista-ficha-fac">
+            <div class="fase" id="fase">En plataforma</div>
+            <div class="hud-nombre">Tierra</div>
+            <div class="hud-dato">MASA <b>${formatoNum(s.M)} kg</b></div>
+            <div class="hud-dato">RADIO <b>${formatoNum(s.R)} m</b></div>
+          </div>
+          <div class="barras-fac" id="barras" hidden>
+            <div class="tit">Energía comunicada</div>
+            <div class="barra-fac ep"><div class="etq"><span>SUBIR (ΔEp)</span><b id="b-ep">0 kWh</b></div><div class="pista"><i id="i-ep"></i></div></div>
+            <div class="barra-fac ec"><div class="etq"><span>VELOCIDAD (Ec)</span><b id="b-ec">0 kWh</b></div><div class="pista"><i id="i-ec"></i></div></div>
+          </div>
+          <div class="vista-hud vista-mensaje" id="mensaje"></div>
+        </div>
+        <aside class="consola-lateral" id="lateral">
+          <div class="bloque-hud orden">
+            <div class="bloque-hud-tit">Orden de Control de Misión</div>
+            <p>${esc(m.historia)}</p>
+            <div class="datos-exo">
+              <div class="hud-dato">G <b>${formatoNum(s.G)} N·m²/kg²</b></div>
+              <div class="hud-dato">1 kWh <b>3,6·10⁶ J</b></div>
+            </div>
+          </div>
+          <div class="bloque-hud paso-hud">
+            <div class="bloque-hud-tit"><span>01</span> Predicción</div>
+            <p class="orden" style="margin:0 0 8px;font-size:14px;color:rgba(225,235,255,.85)">Si el satélite tuviera el doble de masa, la factura sería…</p>
+            <div class="predicciones">
+              <button type="button" class="prediccion" data-p="menor">Menos del doble</button>
+              <button type="button" class="prediccion" data-p="igual">El doble</button>
+              <button type="button" class="prediccion" data-p="mayor">Más del doble</button>
+            </div>
+            <p class="paso-nota">No puntúa: lo comprobarás al final.</p>
+          </div>
+          <div class="bloque-hud paso-hud" id="paso-maniobra">
+            <div class="bloque-hud-tit"><span>02</span> Importe mínimo</div>
+            <div class="maniobra-entrada">
+              <span class="simbolo">€ =</span>
+              <input class="in-mantisa" id="m0" inputmode="decimal" placeholder="mantisa" aria-label="Mantisa">
+              <span class="por-diez">·10^</span>
+              <input class="in-exp" id="e0" inputmode="numeric" placeholder="exp" aria-label="Exponente">
+              <span class="unidad">€</span>
+            </div>
+            <div class="maniobra-previa" id="previa">Importe mínimo de la energía del lanzamiento.</div>
+            <button id="btn-ejecutar" class="btn-hud btn-mantener" type="button" aria-label="Mantén pulsado para lanzar">
+              <span class="relleno"></span>
+              <svg class="icono" viewBox="0 0 20 20" aria-hidden="true"><polygon points="10,1 19,10 10,19 1,10" fill="none" stroke="currentColor" stroke-width="2"/><polygon points="10,6 14,10 10,14 6,10" fill="currentColor"/></svg>
+              <span class="txt">Mantén para lanzar</span>
+            </button>
+          </div>
+        </aside>
+      </div>
+    </section>`;
+
+  E.sim = crearSimFactura($('#vista'), { m: s.m, h: s.h * 1000, R: s.R, GM: s.G * s.M, kwh: s.kwh, alFase: faseEjecucion });
+
+  // predicción
+  const pasoManiobra = $('#paso-maniobra');
+  const marcarPred = () => {
+    app.querySelectorAll('.prediccion').forEach(b => b.classList.toggle('activa', b.dataset.p === prediccion));
+    pasoManiobra.classList.toggle('bloqueado', !prediccion);
+  };
+  app.querySelectorAll('.prediccion').forEach(b => b.addEventListener('click', () => {
+    prediccion = b.dataset.p;
+    try { sessionStorage.setItem(claveP, prediccion); } catch (e) { /* sin almacenamiento */ }
+    marcarPred();
+  }));
+  marcarPred();
+
+  // vista previa del número
+  const previa = $('#previa');
+  const textoPrevia = 'Importe mínimo de la energía del lanzamiento.';
+  const actualizarPrevia = () => {
+    const v = leerNumeroCliente($('#m0').value, $('#e0').value);
+    if (!$('#m0').value.trim() && !$('#e0').value.trim()) { previa.textContent = textoPrevia; previa.classList.remove('error'); return null; }
+    if (v === null) { previa.textContent = 'Formato no válido'; previa.classList.add('error'); return null; }
+    previa.classList.remove('error');
+    previa.textContent = 'Importe = ' + formatoNum(v, 4) + ' €';
+    return v;
+  };
+  ['#m0', '#e0'].forEach(sel => $(sel).addEventListener('input', actualizarPrevia));
+
+  // lanzar (mantener pulsado): entrega, lanzamiento, factura e informe
+  const boton = $('#btn-ejecutar'), txt = boton.querySelector('.txt');
+  const mantener = botonMantener(boton, 900, async () => {
+    const valor = actualizarPrevia();
+    if (valor === null) {
+      aviso('Escribe el importe en notación científica antes de lanzar.');
+      mantener.reiniciar();
+      return;
+    }
+    txt.textContent = 'Transmitiendo…';
+    E.estrellasAntes = E.inicio.estrellas;
+    let res;
+    try {
+      res = await llamar('entregarMision', m.id, [{ m: $('#m0').value.trim(), e: $('#e0').value.trim() }], { prediccion: prediccion });
+    } catch (err) {
+      aviso(mensajeError(err));
+      txt.textContent = 'Mantén para lanzar';
+      mantener.reiniciar();
+      return;
+    }
+    try { sessionStorage.removeItem(claveP); } catch (e) { /* sin almacenamiento */ }
+    E.inicio = res.inicio;
+    pintarBarra();
+    $('.en-curso').textContent = '⏳ Lanzamiento en curso';
+    mostrarEjecucion(`Importe calculado <b>${formatoNum(valor, 4)} €</b>`,
+      [['despegue', 'Despegue y ascenso'], ['orbita', 'Inserción en órbita'], ['factura', 'Emisión de la factura']], 'Lanzamiento en curso');
+    E.sim.ejecutar(valor, res, resultadoSim => informeFactura(m, res, valor, resultadoSim));
+  }, () => {
+    txt.textContent = 'Mantén pulsado…';
+    clearTimeout(boton._t);
+    boton._t = setTimeout(() => { txt.textContent = 'Mantén para lanzar'; }, 1400);
+  });
+}
+
+function informeFactura(m, res, valor, resultadoSim) {
+  const s = m.escena, x = res.extra;
+  $('.consola-cuerpo').classList.add('resultado');
+  const lateral = $('#lateral');
+  const estrellas = Array.from({ length: m.estrellas }, (_, i) =>
+    `<span style="animation-delay:${0.15 + i * 0.25}s" class="${i < res.estrellas ? '' : 'apagada'}">★</span>`).join('');
+  const kwh = J => formatoNum(J / s.kwh, 4) + ' kWh';
+  const textosPred = { mayor: 'más del doble', igual: 'el doble', menor: 'menos del doble' };
+  const pred = res.prediccion
+    ? `<p class="informe-pred">Predijiste que, con el doble de masa, la factura sería <b class="${res.prediccion === 'igual' ? 'ok' : 'mal'}">${textosPred[res.prediccion]}</b>.
+        ${res.prediccion === 'igual' ? '¡Correcto!' : 'En realidad sería exactamente el doble.'}
+        En \\(W = G M m\\left(\\dfrac{1}{R} - \\dfrac{1}{2r}\\right)\\) la energía es proporcional a la masa del satélite: con ${formatoNum(2 * s.m, 4)} kg la factura subiría a ${formatoNum(2 * res.sol, 4)} €.
+        Fíjate en la diferencia con la velocidad orbital, que no depende de la masa: cualquier satélite orbita igual de rápido a esa altura, pero cuanto más masivo, más cuesta ponerlo allí.</p>`
+    : '';
+  const titulo = res.estrellas === m.estrellas ? 'Presupuesto exacto' : res.estrellas > 0 ? 'Presupuesto aproximado' : 'Presupuesto erróneo';
+
+  lateral.classList.remove('ejecutando');
+  lateral.classList.add('informe');
+  lateral.innerHTML = `
+    <div class="bloque-hud">
+      <div class="bloque-hud-tit">Informe de misión</div>
+      ${resultadoSim ? `<div class="informe-sim ${resultadoSim.ok ? 'ok' : 'mal'}">${esc(resultadoSim.texto)}</div>` : ''}
+      <div class="informe-estrellas">${estrellas}</div>
+      <div class="informe-resumen">${titulo} · ${res.estrellas} de ${m.estrellas} ★</div>
+    </div>
+    <div class="bloque-hud">
+      <div class="bloque-hud-tit">Importe de la factura</div>
+      <table class="informe-tabla">
+        <tr><td>Tu importe</td><td>${formatoNum(valor, 4)} €</td></tr>
+        <tr><td>Importe mínimo</td><td>${formatoNum(res.sol, 4)} €</td></tr>
+        <tr><td>Error relativo</td><td>${res.error === null ? 'signo incorrecto' : res.error < 0.0001 ? '< 0,01 %' : formatoNum(res.error * 100, 3) + ' %'}</td></tr>
+      </table>
+      <div class="informe-escala">${textoEscala(m.estrellas)}</div>
+    </div>
+    ${res.pista ? `<div class="informe-pista"><b>Diagnóstico</b>${esc(res.pista)}</div>` : ''}
+    ${pred ? `<div class="bloque-hud"><div class="bloque-hud-tit">Tu predicción</div>${pred}</div>` : ''}
+    <div class="bloque-hud">
+      <div class="bloque-hud-tit">¿Y un lanzamiento real?</div>
+      <p class="informe-pred">La energía mínima cuesta apenas ${formatoNum(res.sol, 3)} €, pero lanzar un satélite así cuesta decenas de millones.
+        Un cohete tiene que subir su propio combustible, pierde energía con el aire y en los gases que expulsa, y solo una mínima parte de la energía química acaba en el satélite.</p>
+    </div>
+    <div class="bloque-hud">
+      <div class="bloque-hud-tit">Resolución</div>
+      <ol class="pasos">${res.pasos.map(p => `<li>${p}</li>`).join('')}</ol>
+    </div>
+    <button id="btn-volver" class="btn-hud principal" type="button">Volver al registro de misiones</button>`;
+  renderMates(lateral);
+  lateral.scrollTop = 0;
+  $('.en-curso').textContent = '✓ Misión completada';
+  $('#btn-volver').addEventListener('click', pantallaPanel);
+  celebrar(E.estrellasAntes, res.inicio.estrellas, res.inicio.objetivo);
+}
+
+/* --------------------------- Simulador ---------------------------- */
+
+/**
+ * Vista desde el polo: el cohete despega del ecuador, sube en espiral hasta la órbita y da una vuelta.
+ * Las barras muestran la energía comunicada (ΔEp y Ec). Al final se «imprime» la factura.
+ */
+function crearSimFactura(cont, p) {
+  const lienzo = document.createElement('canvas');
+  cont.insertBefore(lienzo, cont.firstChild);
+  const ctx = lienzo.getContext('2d');
+  let W = 0, H = 0;
+  const fondo = Array.from({ length: 170 }, () => ({ x: Math.random(), y: Math.random(), r: Math.random() * 1.1 + 0.2, a: Math.random() * 0.6 + 0.2 }));
+  const ajustar = () => {
+    const k = Math.min(window.devicePixelRatio || 1, 2);
+    W = cont.clientWidth; H = cont.clientHeight;
+    lienzo.width = W * k; lienzo.height = H * k;
+    ctx.setTransform(k, 0, 0, k, 0, 0);
+  };
+  const ro = new ResizeObserver(ajustar);
+  ro.observe(cont);
+  ajustar();
+
+  const rasgos = rasgosPolo('Tierra');
+  const r = p.R + p.h;
+  const dEpTot = p.GM * p.m * (1 / p.R - 1 / r), EcTot = p.GM * p.m / (2 * r);
+  const maxE = Math.max(dEpTot, EcTot);
+  const elFase = $('#fase');
+  const a0 = Math.PI * 1.15;                                      // punto de lanzamiento en el ecuador
+  let fase = 'espera', tFase = 0, t = 0, progreso = 0, angOrb = 0, detenido = false, alFinal = null, datos = null, valor = null;
+  const estela = [];
+  const nombres = { despegue: 'Despegue y ascenso', orbita: 'Inserción en órbita', factura: 'Emisión de la factura' };
+  const ponerFase = nf => { fase = nf; tFase = 0; elFase.textContent = nombres[nf]; if (p.alFase) p.alFase(nf, nombres[nf]); };
+  const suave = x => x * x * (3 - 2 * x);
+  const kwh = J => formatoNum(J / p.kwh, 3) + ' kWh';
+
+  function barras(fEp, fEc) {
+    $('#i-ep').style.width = (fEp * dEpTot / maxE * 100) + '%';
+    $('#i-ec').style.width = (fEc * EcTot / maxE * 100) + '%';
+    $('#b-ep').textContent = kwh(fEp * dEpTot);
+    $('#b-ec').textContent = kwh(fEc * EcTot);
+  }
+
+  function imprimirFactura() {
+    const x = datos.extra;
+    const f = document.createElement('div');
+    f.className = 'factura';
+    const ok = datos.estrellas > 0;
+    f.innerHTML = `
+      <h3>Factura</h3>
+      <div class="sub">Lanzamiento · satélite de ${String(p.m).replace(/\B(?=(\d{3})+(?!\d))/g, ' ')} kg</div>
+      <table>
+        <tr><td>Elevación (ΔEp)</td><td>${kwh(x.dEp)}</td></tr>
+        <tr><td>Velocidad orbital (Ec)</td><td>${kwh(x.Ec)}</td></tr>
+        <tr><td>Energía total</td><td>${formatoNum(x.kwh, 4)} kWh</td></tr>
+        <tr class="total"><td>IMPORTE</td><td>${formatoNum(datos.sol, 4)} €</td></tr>
+      </table>
+      <div class="pie">Tu presupuesto: <b class="${ok ? 'ok' : 'mal'}">${formatoNum(valor, 4)} €</b></div>`;
+    cont.appendChild(f);
+    requestAnimationFrame(() => requestAnimationFrame(() => f.classList.add('impresa')));
+  }
+
+  function terminar() {
+    if (detenido) return;
+    detenido = true;
+    const ok = datos.estrellas > 0;
+    const texto = ok ? 'Factura emitida: tu presupuesto cuadra con el importe mínimo'
+      : 'Factura emitida: tu presupuesto no cuadra con el importe mínimo';
+    const msg = $('#mensaje');
+    msg.textContent = texto;
+    msg.className = 'vista-hud vista-mensaje ' + (ok ? 'ok' : 'mal');
+    if (alFinal) { const cb = alFinal; alFinal = null; setTimeout(() => cb({ texto: texto, ok: ok }), 1800); }
+  }
+
+  function avanzar(dt) {
+    if (detenido) return;
+    tFase += dt;
+    if (fase === 'despegue') {
+      progreso = Math.min(1, tFase / 3.2);
+      barras(suave(progreso) >= 1 ? 1 : (1 / p.R - 1 / (p.R + p.h * suave(progreso))) / (1 / p.R - 1 / r), Math.pow(progreso, 1.6));
+      if (progreso >= 1) { angOrb = 0; ponerFase('orbita'); }
+    } else if (fase === 'orbita') {
+      angOrb += dt * 2 * Math.PI / 3;
+      if (tFase > 3) { ponerFase('factura'); imprimirFactura(); }
+    } else if (fase === 'factura') {
+      angOrb += dt * 2 * Math.PI / 3;
+      if (tFase > 1.6) terminar();
+    }
+  }
+
+  let vivo = true, previo = performance.now();
+  function bucle(ahora) {
+    if (!vivo) return;
+    const dt = Math.min(0.05, (ahora - previo) / 1000);
+    previo = ahora; t += dt;
+    avanzar(dt);
+    ctx.clearRect(0, 0, W, H);
+    fondo.forEach(st => { ctx.globalAlpha = st.a; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(st.x * W, st.y * H, st.r, 0, Math.PI * 2); ctx.fill(); });
+    ctx.globalAlpha = 1;
+    const cx = W / 2, cy = H / 2 + 10;
+    const k = Math.min(W, H) * 0.4 / r;
+    // la Tierra no gira (el enunciado desprecia su rotación): solo derivan las nubes
+    dibujarPolo(ctx, cx, cy, p.R * k, 0, rasgos, t * 0.02);
+    // órbita objetivo
+    ctx.save(); ctx.setLineDash([5, 7]); ctx.strokeStyle = 'rgba(63,224,255,0.55)'; ctx.lineWidth = 1.3;
+    ctx.beginPath(); ctx.arc(cx, cy, r * k, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+    ctx.font = '600 11px "Chakra Petch", sans-serif'; ctx.fillStyle = 'rgba(63,224,255,0.8)'; ctx.textAlign = 'center';
+    ctx.fillText('ÓRBITA · h = ' + String(Math.round(p.h / 1000)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' km', cx, cy - r * k - 10);
+    // cohete / satélite
+    let rr = p.R, ang = a0;
+    if (fase === 'despegue') { rr = p.R + p.h * suave(progreso); ang = a0 + 1.2 * Math.pow(progreso, 1.4); }
+    else if (fase === 'orbita' || fase === 'factura' || detenido) { rr = r; ang = a0 + 1.2 + angOrb; }
+    const x = cx + Math.cos(ang) * rr * k, y = cy - Math.sin(ang) * rr * k;
+    if (fase !== 'espera') { estela.push([x, y]); if (estela.length > 160) estela.shift(); }
+    if (estela.length > 1) {
+      ctx.strokeStyle = 'rgba(255,185,46,0.55)'; ctx.lineWidth = 1.6; ctx.beginPath();
+      estela.forEach((q, i) => i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ctx.stroke();
+    }
+    ctx.save(); ctx.translate(x, y); ctx.rotate(-ang + (fase === 'despegue' ? -0.6 : -Math.PI / 2) + Math.PI);
+    if (fase === 'despegue') {
+      const l = 8 + Math.random() * 6;
+      ctx.fillStyle = 'rgba(255,170,60,0.9)'; ctx.beginPath(); ctx.moveTo(-3, 6); ctx.lineTo(0, 6 + l); ctx.lineTo(3, 6); ctx.fill();
+    }
+    ctx.fillStyle = '#e8edf5'; ctx.beginPath(); ctx.moveTo(0, -8); ctx.lineTo(4, -1); ctx.lineTo(4, 6); ctx.lineTo(-4, 6); ctx.lineTo(-4, -1); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#3fe0ff'; ctx.fillRect(-1.5, -3, 3, 3);
+    ctx.restore();
+    if (fase === 'espera') {
+      ctx.font = '600 10px "Chakra Petch", sans-serif'; ctx.fillStyle = 'rgba(255,185,46,0.9)'; ctx.textAlign = 'right';
+      ctx.fillText('PLATAFORMA', x - 10, y + 4);
+    }
+    requestAnimationFrame(bucle);
+  }
+  requestAnimationFrame(bucle);
+
+  return {
+    ejecutar(v, res, alTerminar) {
+      alFinal = alTerminar; datos = res; valor = v;
+      $('#mensaje').textContent = '';
+      $('#barras').hidden = false;
+      ponerFase('despegue');
+    },
+    destruir() { vivo = false; ro.disconnect(); lienzo.remove(); }
+  };
+}
+</script>

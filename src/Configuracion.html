@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <?!= include('Estilos'); ?>
+  <style>
+    /* =================================================================
+     * Configuración: hoja de resultados, campaña y tripulación (solo el profesor)
+     * ================================================================= */
+    .cf-cab { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; padding: 14px 26px; border-bottom: 1px solid var(--hud-linea);
+      background: linear-gradient(180deg, rgba(7, 11, 22, 0.92), rgba(7, 11, 22, 0.6)); }
+    .cf-cab svg.logo { width: 40px; height: 40px; flex: none; }
+    .cf-cab .hex-ext { fill: none; stroke: var(--hud-cian); stroke-width: 4; }
+    .cf-cab .hex-nucleo { fill: var(--hud-ambar); }
+    .cf-titulo { font: 700 22px/1 'Chakra Petch', sans-serif; letter-spacing: 0.2em; text-transform: uppercase; }
+    .cf-sub { margin-top: 5px; font: 500 11px 'Chakra Petch', sans-serif; letter-spacing: 0.22em; text-transform: uppercase; color: var(--hud-magenta); }
+    .cf-cab nav { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+    .cf-main { max-width: 1180px; margin: 0 auto; padding: 22px 20px 60px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; }
+    .cf-fila { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+    @media (max-width: 960px) { .cf-fila { grid-template-columns: minmax(0, 1fr); } }
+    .cf-caja { position: relative; padding: 18px 20px 20px; background: var(--hud-panel); border: 1px solid var(--hud-linea);
+      clip-path: polygon(0 0, calc(100% - var(--corte)) 0, 100% var(--corte), 100% 100%, var(--corte) 100%, 0 calc(100% - var(--corte))); }
+    .cf-caja h2 { margin: 6px 0 10px; font: 700 18px/1.2 'Chakra Petch', sans-serif; letter-spacing: 0.1em; text-transform: uppercase; }
+    .cf-caja p { margin: 0 0 12px; font-size: 14px; color: rgba(220, 235, 255, 0.72); }
+    .cf-caja p b { color: var(--hud-blanco); }
+    .cf-dato { margin-bottom: 12px; font: 600 16px 'Chakra Petch', sans-serif; letter-spacing: 0.06em; color: var(--hud-ambar); overflow-wrap: anywhere; }
+    .cf-acciones { display: flex; flex-wrap: wrap; gap: 8px; }
+    .cf-acciones .btn-hud, .cf-cab .btn-hud { text-decoration: none; }
+    .cf-enlace { display: flex; gap: 6px; margin-bottom: 10px; }
+    .cf-enlace-etq { display: block; margin-bottom: 4px; font: 600 10.5px 'Chakra Petch', sans-serif; letter-spacing: 0.2em; text-transform: uppercase; color: rgba(220, 235, 255, 0.55); }
+    .cf-enlace input { flex: 1; min-width: 0; font: 12px 'Share Tech Mono', monospace; }
+    .cf-estado { display: inline-flex; align-items: center; gap: 10px; margin-bottom: 12px; padding: 7px 12px; border: 1px solid rgba(255, 185, 46, 0.45);
+      background: rgba(255, 185, 46, 0.07); font: 600 13px 'Chakra Petch', sans-serif; letter-spacing: 0.2em; text-transform: uppercase; color: var(--hud-ambar); }
+    /* desplegable de estados: la lista va en <body> porque la caja recorta lo que sobresale */
+    .sel-boton { flex: 1 1 100%; display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 12px; text-align: left; cursor: pointer;
+      background: rgba(5, 8, 17, 0.8); color: var(--hud-blanco); border: 1px solid var(--hud-linea); }
+    .sel-boton:hover, .sel-boton[aria-expanded="true"] { border-color: var(--hud-ambar); }
+    .sel-boton:focus-visible { outline: 2px solid var(--hud-ambar); outline-offset: 2px; }
+    .sel-valor { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+    .sel-flecha { flex: none; width: 16px; height: 16px; fill: none; stroke: var(--hud-ambar); stroke-width: 2; transition: transform 0.2s; }
+    .sel-boton[aria-expanded="true"] .sel-flecha { transform: rotate(180deg); }
+    .sel-nombre { display: flex; align-items: center; gap: 8px; font: 600 13px 'Chakra Petch', sans-serif; letter-spacing: 0.14em; text-transform: uppercase; }
+    .sel-nombre.vacio { color: rgba(220, 235, 255, 0.5); }
+    .sel-desc { font-size: 12.5px; line-height: 1.35; color: rgba(220, 235, 255, 0.62); }
+    .sel-lista { position: fixed; z-index: 60; margin: 0; padding: 4px; list-style: none; background: #0a1124; border: 1px solid var(--hud-ambar);
+      box-shadow: 0 14px 34px rgba(0, 0, 0, 0.6); animation: selAbre 0.15s ease-out; }
+    .sel-lista[hidden] { display: none; }
+    @keyframes selAbre { from { opacity: 0; transform: translateY(-4px); } }
+    .sel-op { display: flex; align-items: flex-start; gap: 12px; padding: 9px 10px; cursor: pointer; border-left: 2px solid transparent; }
+    .sel-op .sel-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+    .sel-num { flex: none; padding-top: 1px; font: 12px 'Share Tech Mono', monospace; color: var(--hud-cian); }
+    .sel-op.activa { background: rgba(255, 185, 46, 0.1); border-left-color: var(--hud-ambar); }
+    .sel-op[aria-selected="true"] .sel-nombre { color: var(--hud-ambar); }
+    .sel-op[aria-selected="true"] .sel-nombre::after { content: '✓'; }
+    .sel-op[aria-disabled="true"] { cursor: not-allowed; opacity: 0.5; }
+    .sel-actual { padding: 1px 6px; border: 1px solid var(--hud-cian); color: var(--hud-cian); font-size: 9.5px; letter-spacing: 0.16em; }
+
+    .cf-instalar { max-width: 620px; margin: 6vh auto 0; }
+    .cf-instalar .campo-hud { margin-bottom: 14px; }
+
+    .cf-tabla-cab { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+    .cf-tabla-cab h2 { margin: 0; }
+    .cf-tabla-cab .campo-hud { margin-left: auto; width: min(300px, 100%); padding: 10px 12px; font: 500 14px 'Inter', sans-serif; letter-spacing: 0; text-transform: none; }
+    .cf-tabla-scroll { overflow-x: auto; }
+    table.cf-tabla { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+    .cf-tabla th { padding: 8px 10px; text-align: left; font: 600 10.5px 'Chakra Petch', sans-serif; letter-spacing: 0.18em; text-transform: uppercase;
+      color: rgba(220, 235, 255, 0.55); border-bottom: 1px solid var(--hud-linea); white-space: nowrap; }
+    .cf-tabla td { padding: 7px 10px; border-bottom: 1px solid rgba(200, 230, 255, 0.08); vertical-align: middle; }
+    .cf-tabla tr:hover td { background: rgba(255, 255, 255, 0.025); }
+    .cf-tabla .num { text-align: right; font-family: 'Share Tech Mono', monospace; }
+    .cf-tabla .ind { font: 600 13px 'Chakra Petch', sans-serif; letter-spacing: 0.06em; text-transform: uppercase; }
+    .cf-tabla .apagado { color: rgba(220, 235, 255, 0.35); }
+    .cf-tabla .curso { color: var(--hud-cian); }
+    .cf-tabla .acc { white-space: nowrap; text-align: right; }
+    .cf-mini { padding: 5px 9px; margin-left: 4px; font: 600 10.5px 'Chakra Petch', sans-serif; letter-spacing: 0.12em; text-transform: uppercase; cursor: pointer;
+      background: rgba(255, 255, 255, 0.04); color: var(--hud-blanco); border: 1px solid var(--hud-linea); }
+    .cf-mini:hover:not(:disabled) { border-color: var(--hud-ambar); color: var(--hud-ambar); }
+    .cf-mini:disabled { opacity: 0.3; cursor: default; }
+    .cf-vacio { padding: 18px 0 4px; text-align: center; color: rgba(220, 235, 255, 0.5); }
+    .aviso.ok::before { content: 'Hecho · '; color: #7ee2a8; }
+    .cf-banner { font-size: 14px; line-height: 1.5; }
+    .cf-guia { display: inline-flex; align-items: center; gap: 8px; border-color: var(--hud-ambar); color: var(--hud-ambar); }
+    .cf-guia svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; }
+    .cf-caja p a { color: var(--hud-cian); }
+    .cf-instalar + .cf-banner, .cf-banner + .cf-instalar { margin-top: 18px; }
+    .cf-peligro { border-color: rgba(255, 61, 127, 0.55); background: linear-gradient(160deg, rgba(255, 61, 127, 0.1), rgba(7, 11, 22, 0.85)); }
+    .cf-peligro .modal-kicker { color: var(--hud-magenta); }
+    .cf-peligro-fila { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
+    .cf-peligro-fila p { flex: 1; min-width: 260px; margin: 0; }
+    .btn-rojo { padding: 16px 30px; cursor: pointer; border: 2px solid #ff3d5a; background: #d81b3c; color: #fff;
+      font: 700 15px 'Chakra Petch', sans-serif; letter-spacing: 0.2em; text-transform: uppercase; box-shadow: 0 0 22px rgba(255, 40, 80, 0.35);
+      clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px)); }
+    .btn-rojo:hover:not(:disabled) { background: #ff2a4d; }
+    .btn-rojo:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }
+    .modal-botones .btn-rojo { padding: 11px 20px; font-size: 13px; }
+    .cf-cargando { margin: 12vh auto; text-align: center; font: 500 13px 'Chakra Petch', sans-serif; letter-spacing: 0.24em; text-transform: uppercase; color: var(--hud-cian); }
+  </style>
+</head>
+<body>
+  <div class="cielo" aria-hidden="true"></div>
+  <header class="cf-cab">
+    <svg class="logo" viewBox="0 0 120 120" aria-hidden="true"><polygon class="hex-ext" points="60,8 105,34 105,86 60,112 15,86 15,34"/><polygon class="hex-nucleo" points="60,42 78,60 60,78 42,60"/></svg>
+    <div><div class="cf-titulo">Configuración</div><div class="cf-sub">Misiones orbitales · Solo para ti: no la proyectes</div></div>
+    <nav id="cf-nav"></nav>
+  </header>
+  <main class="cf-main" id="cf"><div class="cf-cargando">Conectando con Control de Misión…</div></main>
+
+  <div id="modal" class="modal" hidden>
+    <div class="modal-caja" role="dialog" aria-modal="true">
+      <div id="modal-contenido"></div>
+      <div id="modal-botones" class="modal-botones"></div>
+    </div>
+  </div>
+  <div id="aviso" class="aviso" role="status" aria-live="polite"></div>
+  <div id="cargando" class="carga-accion" hidden role="status" aria-live="polite">
+    <div class="carga-hex"><svg viewBox="0 0 120 120" aria-hidden="true">
+      <polygon class="hex-ext" points="60,8 105,34 105,86 60,112 15,86 15,34"/>
+      <polygon class="hex-int" points="60,26 89.4,43 89.4,77 60,94 30.6,77 30.6,43"/>
+      <polygon class="hex-nucleo" points="60,48 72,60 60,72 48,60"/>
+    </svg></div>
+    <div class="carga-accion-tit"></div>
+    <div class="carga-accion-sub"></div>
+    <div class="carga-barra"><span></span></div>
+  </div>
+
+  <script>
+  const $ = s => document.querySelector(s);
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const llamar = (fn, ...args) => new Promise((ok, mal) => google.script.run.withSuccessHandler(ok).withFailureHandler(mal)[fn](...args));
+  const mensaje = err => (err && err.message ? err.message : String(err)).replace(/^Error:\s*/, '');
+  let C = null, filtro = '';
+  // guía de instalación y uso (PDF en el Drive del autor): las copias de otros profesores apuntan a la misma
+  const GUIA = 'https://drive.google.com/file/d/1Csqar71jG4EmoBvCspUgEqzPMPS6u0E_/view?usp=sharing';
+  const ICONO_GUIA = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 6.5C9.6 4.9 6.6 4.6 3.5 5.4v13c3.1-.8 6.1-.5 8.5 1.1 2.4-1.6 5.4-1.9 8.5-1.1v-13c-3.1-.8-6.1-.5-8.5 1.1z"/><path d="M12 6.5v13"/></svg>';
+
+  function aviso(texto, ok) {
+    const a = $('#aviso');
+    a.textContent = texto;
+    a.classList.toggle('ok', !!ok);
+    a.classList.add('visible');
+    clearTimeout(aviso._t);
+    aviso._t = setTimeout(() => a.classList.remove('visible'), 4500);
+  }
+
+  /**
+   * Confirmación con botones; si lleva un campo de texto, devuelve su valor (o null si se cancela).
+   * Con `espera` (segundos), el botón de confirmar es rojo y no se activa hasta que termina la cuenta.
+   */
+  function confirmar(titulo, html, textoSi, espera) {
+    return new Promise(res => {
+      $('#modal-contenido').innerHTML = `<div class="modal-kicker">Configuración</div><h2>${titulo}</h2>${html}`;
+      const zona = $('#modal-botones');
+      zona.innerHTML = '';
+      const campo = $('#modal-contenido input');
+      let reloj = null;
+      const tecla = e => { if (e.key === 'Escape') cerrar(null); };
+      const cerrar = v => { clearInterval(reloj); $('#modal').hidden = true; document.removeEventListener('keydown', tecla); res(v); };
+      document.addEventListener('keydown', tecla);
+      const no = document.createElement('button');
+      no.type = 'button'; no.className = 'btn-hud'; no.textContent = 'Cancelar'; no.onclick = () => cerrar(null);
+      const si = document.createElement('button');
+      si.type = 'button'; si.className = espera ? 'btn-rojo' : 'btn-hud principal'; si.textContent = textoSi;
+      si.onclick = () => cerrar(campo ? campo.value : true);
+      if (espera) {
+        const fin = Date.now() + espera * 1000;
+        const tic = () => {
+          const s = Math.ceil((fin - Date.now()) / 1000);
+          si.disabled = s > 0;
+          si.textContent = s > 0 ? `${textoSi} (${s})` : textoSi;
+          if (s <= 0) clearInterval(reloj);
+        };
+        tic();
+        reloj = setInterval(tic, 200);
+      }
+      zona.append(no, si);
+      $('#modal').hidden = false;
+      (campo || (espera ? no : si)).focus();
+    });
+  }
+
+  /**
+   * Ejecuta una acción del servidor con el botón bloqueado y repinta con lo que devuelve.
+   * `carga` ({ titulo, sub }) muestra la pantalla de carga desde el principio; sin ella, solo aparece
+   * si la acción tarda más de medio segundo (así las rápidas no parpadean).
+   */
+  async function hacer(boton, fn, args, ok, carga) {
+    if (boton) boton.disabled = true;
+    const reloj = setTimeout(() => cargando(carga || { titulo: 'Transmitiendo a Control de Misión' }), carga ? 0 : 500);
+    try {
+      const r = await llamar(fn, ...args);
+      pintar(r);
+      if (r && r.avisoCarpeta) informar('Hoja creada en «Mi unidad»', r.avisoCarpeta);
+      else if (ok) aviso(ok, true);
+    }
+    catch (err) { aviso(mensaje(err)); if (boton) boton.disabled = false; }
+    finally { clearTimeout(reloj); cargando(null); }
+  }
+
+  /** Pantalla de carga a toda la ventana (null la quita). */
+  function cargando(c) {
+    const el = $('#cargando');
+    if (!c) { el.hidden = true; return; }
+    el.querySelector('.carga-accion-tit').textContent = c.titulo;
+    el.querySelector('.carga-accion-sub').textContent = c.sub || 'No cierres esta página';
+    el.hidden = false;
+  }
+
+  /** Sin el permiso completo de Drive, las hojas nuevas se quedan en «Mi unidad». */
+  function bannerDrive(c) {
+    return c.faltaDrive ? `<div class="modal-aviso cf-banner"><b>Falta el permiso de Google Drive.</b> Sin él, las hojas de resultados se crean en «Mi unidad»
+      en vez de en la carpeta del script. Abre el editor del script, ejecuta la función <b>autorizar</b> y, en la pantalla de permisos,
+      marca la casilla de Google Drive (o «Seleccionar todo»). Después recarga esta página.</div>` : '';
+  }
+
+  /** Aviso que no desaparece solo: hay que cerrarlo. */
+  function informar(titulo, texto) {
+    $('#modal-contenido').innerHTML = `<div class="modal-kicker">Configuración</div><h2>${esc(titulo)}</h2><p>${esc(texto)}</p>`;
+    const zona = $('#modal-botones');
+    zona.innerHTML = '';
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'btn-hud principal'; b.textContent = 'Entendido';
+    b.onclick = () => { $('#modal').hidden = true; };
+    zona.append(b);
+    $('#modal').hidden = false;
+    b.focus();
+  }
+
+  function enlace(id, etiqueta, url) {
+    return `<div><label for="${id}" class="cf-enlace-etq">${etiqueta}</label>
+      <div class="cf-enlace"><input id="${id}" class="campo-hud" readonly value="${esc(url)}">
+      <button type="button" class="btn-hud" data-copiar="${id}">Copiar</button><a class="btn-hud" href="${esc(url)}" target="_blank">Abrir</a></div></div>`;
+  }
+
+  function pintar(c) {
+    C = c;
+    $('#cf-nav').innerHTML = `<a class="btn-hud cf-guia" href="${GUIA}" target="_blank">${ICONO_GUIA}Guía</a>` +
+      (c.hoja && c.puente ? `<a class="btn-hud" href="${esc(c.puente)}" target="_blank">Puente de mando</a><a class="btn-hud" href="${esc(c.app)}" target="_blank">App de alumnos</a>` : '');
+    if (!c.hoja) return pintarInstalar(c);
+    $('#cf').innerHTML = bannerDrive(c) + `
+      <div class="cf-fila">
+        <section class="cf-caja">
+          <div class="modal-kicker">Hoja de resultados</div>
+          <h2>Campaña actual</h2>
+          <div class="cf-dato">${esc(c.hoja.nombre)}</div>
+          <p>Aquí se guardan los tripulantes, sus misiones y el registro de entregas.</p>
+          <div class="cf-acciones"><a class="btn-hud" href="${esc(c.hoja.url)}" target="_blank">Abrir hoja</a>
+            <button type="button" class="btn-hud principal" id="btn-nueva">Nueva campaña</button></div>
+        </section>
+        <section class="cf-caja">
+          <div class="modal-kicker">Estado</div>
+          <h2>Campaña</h2>
+          <div class="cf-estado"><span class="pulso"></span>${esc(c.estados[c.campana])}</div>
+          <p>Se controla desde el <b>puente de mando</b>. Usa esto solo para corregir un error, como reabrir una campaña terminada.</p>
+          <div class="cf-acciones">
+            <button type="button" class="sel-boton" id="sel-estado" role="combobox" aria-haspopup="listbox" aria-expanded="false" aria-controls="sel-estado-lista" aria-label="Nuevo estado de la campaña">
+              <span class="sel-valor"><span class="sel-nombre vacio">Elige el nuevo estado…</span></span>
+              <svg class="sel-flecha" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 6l5 5 5-5"/></svg>
+            </button>
+            <button type="button" class="btn-hud" id="btn-estado" disabled>Cambiar estado</button></div>
+        </section>
+        <section class="cf-caja">
+          <div class="modal-kicker">Enlaces</div>
+          <h2>Para compartir</h2>
+          ${c.app ? enlace('url-app', 'App de alumnos', c.app) + enlace('url-puente', 'Puente de mando (solo tú)', c.puente) : '<p>No se han podido obtener los enlaces: cópialos de «Implementar › Gestionar implementaciones».</p>'}
+        </section>
+        <section class="cf-caja">
+          <div class="modal-kicker">Apuntes</div>
+          <h2>PDF de consulta</h2>
+          ${c.apuntes ? `<div class="cf-dato">${esc(c.apuntes.nombre)}</div>` : ''}
+          <p>${c.apuntes ? 'Los alumnos lo abren con el botón <b>Apuntes</b> de la barra, en una ventana que pueden mover.' : 'Pega el enlace de Drive de un PDF y aparecerá el botón <b>Apuntes</b> en la barra de los alumnos.'}
+            No hace falta compartirlo con ellos.</p>
+          <div class="cf-enlace"><input class="campo-hud" id="in-apuntes" placeholder="Enlace de Drive del PDF" aria-label="Enlace de Drive del PDF de apuntes">
+            <button type="button" class="btn-hud principal" id="btn-apuntes">${c.apuntes ? 'Cambiar' : 'Guardar'}</button></div>
+          ${c.apuntes ? `<div class="cf-acciones"><a class="btn-hud" href="${esc(c.apuntes.url)}" target="_blank">Ver en Drive</a>
+            <button type="button" class="btn-hud" id="btn-quitar-apuntes">Quitar apuntes</button></div>` : ''}
+        </section>
+      </div>
+      <section class="cf-caja">
+        <div class="cf-tabla-cab">
+          <div><div class="modal-kicker">Tripulación</div><h2>${c.tripulantes.length} ${c.tripulantes.length === 1 ? 'tripulante' : 'tripulantes'}</h2></div>
+          <input class="campo-hud" id="buscar" placeholder="Buscar por correo o indicativo" value="${esc(filtro)}" aria-label="Buscar tripulante">
+          <button type="button" class="btn-hud" id="btn-recargar">Actualizar</button>
+        </div>
+        <div class="cf-tabla-scroll"><table class="cf-tabla">
+          <thead><tr><th>Correo</th><th>Indicativo</th><th>Avatar</th><th class="num">★</th><th class="num">Misiones</th><th>En misión</th><th>Última actividad</th><th></th></tr></thead>
+          <tbody id="tabla"></tbody>
+        </table></div>
+      </section>
+      <section class="cf-caja cf-peligro">
+        <div class="modal-kicker">Zona de peligro</div>
+        <h2>Restablecer la app</h2>
+        <div class="cf-peligro-fila">
+          <p>Vuelve al estado inicial: se <b>desconecta la hoja de resultados</b> y la app queda como recién instalada. La hoja no se borra: se queda en tu Drive.</p>
+          <button type="button" class="btn-rojo" id="btn-restablecer">Restablecer app</button>
+        </div>
+      </section>`;
+    pintarTabla();
+    $('#btn-restablecer').onclick = restablecer;
+    $('#btn-nueva').onclick = nuevaCampana;
+    $('#btn-estado').onclick = cambiarEstado;
+    $('#btn-apuntes').onclick = e => {
+      const enlace = $('#in-apuntes').value.trim();
+      if (!enlace) { aviso('Pega primero el enlace de Drive del PDF.'); return; }
+      hacer(e.currentTarget, 'ponerApuntes', [enlace], 'Apuntes guardados.', { titulo: 'Comprobando el PDF', sub: 'Buscando el archivo en tu Drive' });
+    };
+    if (c.apuntes) $('#btn-quitar-apuntes').onclick = async e => {
+      const b = e.currentTarget;
+      if (await confirmar('¿Quitar los apuntes?', '<p>El botón <b>Apuntes</b> desaparecerá de la barra de los alumnos. El PDF no se borra de tu Drive.</p>', 'Quitar')) {
+        hacer(b, 'ponerApuntes', [''], 'Apuntes quitados.');
+      }
+    };
+    estadoElegido = selectorEstado(c);
+    $('#btn-recargar').onclick = e => hacer(e.currentTarget, 'getConfiguracion', [], 'Tripulación actualizada.');
+    $('#buscar').oninput = e => { filtro = e.target.value; pintarTabla(); };
+  }
+
+  function pintarTabla() {
+    const q = filtro.trim().toLowerCase();
+    const lista = C.tripulantes.filter(t => !q || t.correo.toLowerCase().includes(q) || t.indicativo.toLowerCase().includes(q))
+      .sort((a, b) => a.correo.localeCompare(b.correo, 'es'));
+    const hora = ms => ms ? new Date(ms).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
+    $('#tabla').innerHTML = lista.length ? lista.map(t => `
+      <tr>
+        <td>${esc(t.correo)}</td>
+        <td class="ind ${t.indicativo ? '' : 'apagado'}">${esc(t.indicativo || '—')}</td>
+        <td class="${t.avatar ? '' : 'apagado'}">${t.avatar ? '✓' : 'En el hangar'}</td>
+        <td class="num">${t.estrellas}</td>
+        <td class="num">${t.hechas}</td>
+        <td class="${t.enCurso ? 'curso' : 'apagado'}">${t.enCurso ? esc(t.enCurso.titulo) : '—'}</td>
+        <td class="apagado">${hora(t.actividad)}</td>
+        <td class="acc">
+          <button type="button" class="cf-mini" data-accion="desbloquear" data-correo="${esc(t.correo)}" ${t.enCurso ? '' : 'disabled'} title="Libera la misión en curso para que pueda volver a empezarla">Desbloquear</button>
+          <button type="button" class="cf-mini" data-accion="reiniciar" data-correo="${esc(t.correo)}" ${t.hechas || t.enCurso ? '' : 'disabled'} title="Borra sus misiones y estrellas">Reiniciar</button>
+          <button type="button" class="cf-mini" data-accion="avatar" data-correo="${esc(t.correo)}" ${t.avatar ? '' : 'disabled'} title="Al volver a entrar podrá diseñar de nuevo su astronauta">Rediseñar avatar</button>
+        </td>
+      </tr>`).join('') : `<tr><td colspan="8" class="cf-vacio">${C.tripulantes.length ? 'Nadie coincide con la búsqueda.' : 'Todavía no ha entrado nadie.'}</td></tr>`;
+  }
+
+  const ACCIONES = {
+    desbloquear: { titulo: '¿Desbloquear la misión?', texto: t => `<p><b>${esc(t.indicativo || t.correo)}</b> podrá volver a empezar «${esc(t.enCurso.titulo)}» con los mismos datos.</p>`, si: 'Desbloquear', ok: 'Misión desbloqueada.' },
+    reiniciar: { titulo: '¿Reiniciar el progreso?', texto: t => `<p>Se borrarán las misiones y las estrellas de <b>${esc(t.indicativo || t.correo)}</b>. Su avatar y su indicativo se conservan.</p><div class="modal-aviso">No se puede deshacer.</div>`, si: 'Reiniciar', ok: 'Progreso reiniciado.' },
+    avatar: { titulo: '¿Permitir rediseñar el avatar?', texto: t => `<p>La próxima vez que entre, <b>${esc(t.indicativo || t.correo)}</b> pasará por el editor de astronauta. Mientras tanto no aparecerá en el puente.</p>`, si: 'Permitir', ok: 'Podrá rediseñar su avatar.' }
+  };
+
+  document.addEventListener('click', async e => {
+    const copiar = e.target.closest('[data-copiar]');
+    if (copiar) {
+      const inp = document.getElementById(copiar.dataset.copiar);
+      inp.select();
+      try { await navigator.clipboard.writeText(inp.value); } catch (err) { document.execCommand('copy'); }
+      aviso('Enlace copiado.', true);
+      return;
+    }
+    const b = e.target.closest('[data-accion]');
+    if (!b || b.disabled) return;
+    const t = C.tripulantes.find(x => x.correo === b.dataset.correo), a = ACCIONES[b.dataset.accion];
+    if (!t || !await confirmar(a.titulo, a.texto(t), a.si)) return;
+    hacer(b, 'accionTripulante', [t.correo, b.dataset.accion], a.ok);
+  });
+
+  async function nuevaCampana() {
+    const nombre = await confirmar('¿Empezar una nueva campaña?', `
+      <p>Se creará una <b>hoja de resultados nueva y vacía</b> en la carpeta de este script y la app pasará a usarla: toda la tripulación empieza de cero, avatar incluido. La campaña quedará <b>cerrada</b> hasta que abras el hangar desde el puente.</p>
+      <p>La hoja actual, «${esc(C.hoja.nombre)}», se conserva tal cual.</p>
+      <input class="campo-hud" maxlength="80" value="${esc(C.sugerido)}" aria-label="Nombre de la nueva hoja">`, 'Crear nueva campaña');
+    if (nombre === null) return;
+    hacer($('#btn-nueva'), 'crearHojaResultados', [nombre], 'Nueva campaña creada.', CARGA_HOJA);
+  }
+
+  async function restablecer() {
+    const si = await confirmar('¿Restablecer la app?', `
+      <p>La app volverá a su <b>estado inicial</b>, como recién instalada:</p>
+      <ul class="modal-lista">
+        <li>Se desconecta la hoja «${esc(C.hoja.nombre)}». No se borra: se queda en tu Drive con todos sus datos.</li>
+        <li>Los alumnos verán «La actividad aún no está preparada» hasta que crees una hoja nueva.</li>
+        <li>Al volver aquí tendrás que crear la hoja de resultados desde cero.</li>
+      </ul>
+      <div class="modal-aviso">El botón se activará en 10 segundos.</div>`, 'Restablecer app', 10);
+    if (si) hacer($('#btn-restablecer'), 'restablecerApp', [], 'App restablecida. Crea una hoja de resultados cuando quieras.',
+      { titulo: 'Restableciendo la app', sub: 'Desconectando la hoja de resultados' });
+  }
+
+  /* ----------------------- desplegable de estados ----------------------- */
+  const DESC_ESTADOS = {
+    cerrada: 'Nadie puede entrar todavía: los alumnos ven la pantalla de espera.',
+    hangar: 'Los alumnos diseñan su astronauta. Las misiones siguen cerradas.',
+    curso: 'Misiones abiertas. Desde aquí se abren al momento, sin cuenta atrás.',
+    finalizada: 'No se aceptan envíos. Cada alumno ve su informe final.'
+  };
+  const ORDEN_ESTADOS = ['cerrada', 'hangar', 'curso', 'finalizada'];
+  let estadoElegido = () => null;
+
+  /** Lista de estados en el orden de la campaña; el actual aparece, pero no se puede elegir. Devuelve el elegido. */
+  function selectorEstado(c) {
+    document.querySelectorAll('.sel-lista').forEach(l => l.remove());
+    // orden de la campaña fijado aquí: al pasar del servidor, Google no conserva el orden de las claves
+    const claves = ORDEN_ESTADOS.filter(k => c.estados[k]), boton = $('#sel-estado');
+    const nombre = k => `<span class="sel-nombre">${esc(c.estados[k])}${k === c.campana ? '<span class="sel-actual">Actual</span>' : ''}</span>`;
+    const lista = document.createElement('ul');
+    lista.className = 'sel-lista'; lista.id = 'sel-estado-lista'; lista.hidden = true;
+    lista.setAttribute('role', 'listbox');
+    lista.innerHTML = claves.map((k, i) => `
+      <li class="sel-op" role="option" id="sel-op-${k}" aria-disabled="${k === c.campana}" aria-selected="false">
+        <span class="sel-num">0${i + 1}</span><span class="sel-txt">${nombre(k)}<span class="sel-desc">${esc(DESC_ESTADOS[k] || '')}</span></span>
+      </li>`).join('');
+    document.body.appendChild(lista);
+    const ops = [...lista.children];
+    let elegido = null, activa = -1;
+
+    const marcar = i => {
+      activa = i;
+      ops.forEach((o, j) => o.classList.toggle('activa', j === i));
+      if (i >= 0) boton.setAttribute('aria-activedescendant', ops[i].id);
+    };
+    const abrir = () => {
+      lista.hidden = false;
+      const r = boton.getBoundingClientRect(), alto = lista.offsetHeight;
+      lista.style.left = r.left + 'px';
+      lista.style.width = r.width + 'px';
+      // debajo del botón o, si no cabe, encima
+      lista.style.top = (r.bottom + 4 + alto > innerHeight && r.top - 4 - alto > 0 ? r.top - 4 - alto : r.bottom + 4) + 'px';
+      boton.setAttribute('aria-expanded', 'true');
+      marcar(elegido ? claves.indexOf(elegido) : claves.findIndex(k => k !== c.campana));
+    };
+    const cerrar = () => { lista.hidden = true; boton.setAttribute('aria-expanded', 'false'); boton.removeAttribute('aria-activedescendant'); };
+    const elegir = i => {
+      if (claves[i] === c.campana) return;
+      elegido = claves[i];
+      ops.forEach((o, j) => o.setAttribute('aria-selected', j === i));
+      boton.querySelector('.sel-valor').innerHTML = nombre(elegido) + `<span class="sel-desc">${esc(DESC_ESTADOS[elegido] || '')}</span>`;
+      $('#btn-estado').disabled = false;
+      cerrar();
+      boton.focus();
+    };
+    // las flechas saltan el estado actual
+    const mover = d => {
+      let i = activa;
+      for (let n = 0; n < claves.length; n++) { i = (i + d + claves.length) % claves.length; if (claves[i] !== c.campana) break; }
+      marcar(i);
+    };
+    boton.onclick = () => (lista.hidden ? abrir() : cerrar());
+    boton.onkeydown = e => {
+      if (lista.hidden) {
+        if (['ArrowDown', 'ArrowUp', 'Enter', ' '].includes(e.key)) { e.preventDefault(); abrir(); }
+        return;
+      }
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); mover(e.key === 'ArrowDown' ? 1 : -1); }
+      else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (activa >= 0) elegir(activa); }
+      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cerrar(); }
+      else if (e.key === 'Tab') cerrar();
+    };
+    ops.forEach((o, i) => {
+      o.onpointerdown = e => e.preventDefault();               // que el botón no pierda el foco
+      o.onclick = () => elegir(i);
+      o.onpointerenter = () => { if (claves[i] !== c.campana) marcar(i); };
+    });
+    cerrarSelector = cerrar;
+    return () => elegido;
+  }
+  // al pulsar fuera, desplazar o cambiar el tamaño de la ventana, la lista se cierra
+  let cerrarSelector = () => {};
+  document.addEventListener('pointerdown', e => { if (!e.target.closest('.sel-lista, #sel-estado')) cerrarSelector(); });
+  window.addEventListener('resize', () => cerrarSelector());
+  window.addEventListener('scroll', () => cerrarSelector(), true);
+
+  async function cambiarEstado() {
+    const estado = estadoElegido();
+    if (!estado) return;
+    const si = await confirmar('¿Cambiar el estado?', `<p>La campaña pasará de <b>${esc(C.estados[C.campana])}</b> a <b>${esc(C.estados[estado])}</b>. Los alumnos lo notarán en unos segundos${estado === 'curso' ? ', sin cuenta atrás' : ''}.</p>`, 'Cambiar estado');
+    if (si) hacer($('#btn-estado'), 'ponerEstadoCampana', [estado], 'Estado cambiado.');
+  }
+
+  function pintarInstalar(c) {
+    $('#cf').innerHTML = bannerDrive(c) + `
+      <section class="cf-caja cf-instalar">
+        <div class="modal-kicker">Primera puesta en marcha</div>
+        <h2>Crea la hoja de resultados</h2>
+        <p>Es la hoja de cálculo donde se guardarán los tripulantes, sus misiones y el registro de entregas. Se creará en la misma carpeta de Drive que este script. Los alumnos nunca tendrán acceso a ella.</p>
+        <p>¿Es tu primera vez? La <a href="${GUIA}" target="_blank">guía para el profesorado</a> explica la instalación, el día de clase y la gestión paso a paso.</p>
+        <input class="campo-hud" id="in-nombre" maxlength="80" value="${esc(c.sugerido)}" aria-label="Nombre de la hoja">
+        <div class="cf-acciones"><button type="button" class="btn-hud principal" id="btn-crear">Crear hoja de resultados</button></div>
+      </section>`;
+    $('#btn-crear').onclick = e => hacer(e.currentTarget, 'crearHojaResultados', [$('#in-nombre').value],
+      'Hoja creada. La campaña está cerrada: ábrela desde el puente cuando quieras.', CARGA_HOJA);
+  }
+
+  const CARGA_HOJA = { titulo: 'Creando la hoja de resultados', sub: 'Preparando las pestañas Alumnos, Registro y Campaña' };
+
+  llamar('getConfiguracion').then(pintar).catch(err => {
+    $('#cf').innerHTML = `<div class="cf-cargando">${esc(mensaje(err))}</div>`;
+  });
+  </script>
+</body>
+</html>

@@ -1,0 +1,613 @@
+<style>
+  /* =================================================================
+   * Misión «Ascenso orbital»: consola de dinámica de vuelo
+   * ================================================================= */
+  .consola { display: flex; flex-direction: column; gap: 12px; }
+  .consola-cab { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .consola-icono { display: grid; place-items: center; width: 50px; height: 56px; font-size: 26px;
+    background: linear-gradient(160deg, rgba(63,224,255,0.25), rgba(63,224,255,0.05));
+    clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%); }
+  .consola-kicker { font: 12px 'Share Tech Mono', monospace; color: var(--hud-cian); letter-spacing: 0.08em; }
+  .consola-cab h1 { margin: 2px 0 0; font: 700 26px/1.1 'Chakra Petch', sans-serif; letter-spacing: 0.08em; text-transform: uppercase; }
+  .consola-cab .en-curso { margin-left: auto; }
+
+  .consola-cuerpo { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(340px, 1fr); gap: 14px; }
+  .consola-vista { position: relative; min-height: 460px; overflow: hidden; border: 1px solid var(--hud-linea);
+    background: radial-gradient(circle at 50% 50%, #0c1735 0%, #050811 70%);
+    clip-path: polygon(0 0, calc(100% - var(--corte)) 0, 100% var(--corte), 100% 100%, var(--corte) 100%, 0 calc(100% - var(--corte))); }
+  .consola-vista canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .consola-vista::after { content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: repeating-linear-gradient(0deg, rgba(255,255,255,0.02) 0 1px, transparent 1px 3px); }
+  .vista-hud { position: absolute; z-index: 2; pointer-events: none; font: 13px 'Share Tech Mono', monospace; color: rgba(220,235,255,0.75); }
+  .hud-nombre { margin: 2px 0 6px; color: rgba(220,235,255,0.6); }
+  .hud-dato { font: 13px/1.7 'Share Tech Mono', monospace; color: rgba(220,235,255,0.75); }
+  .hud-dato b { color: var(--hud-cian); font-weight: 400; }
+  .hud-destino b { color: var(--hud-ambar) !important; }
+  .corrupto { display: inline-block; width: 12ch; white-space: pre; overflow: hidden; vertical-align: bottom; text-align: left; color: var(--hud-magenta) !important; text-shadow: 2px 0 rgba(63,224,255,0.6), -2px 0 rgba(255,61,127,0.6); animation: corrupto 0.9s steps(2) infinite; }
+  @keyframes corrupto { 0%, 100% { transform: translateX(0); opacity: 1; } 40% { transform: translateX(-2px); opacity: 0.75; } 70% { transform: translateX(2px); } }
+  .vista-hud b { color: var(--hud-cian); font-weight: 400; }
+  .vista-telemetria { top: 16px; left: 20px; line-height: 1.6; }
+  .vista-fase { top: 16px; right: 22px; text-align: right; }
+  .vista-fase .fase { font: 600 13px 'Chakra Petch', sans-serif; letter-spacing: 0.18em; text-transform: uppercase; color: var(--hud-ambar); }
+  .vista-mensaje { left: 0; right: 0; bottom: 18px; text-align: center; font: 600 14px 'Chakra Petch', sans-serif; letter-spacing: 0.14em; text-transform: uppercase; }
+  .vista-mensaje.ok { color: #7ee2a8; } .vista-mensaje.mal { color: var(--hud-magenta); }
+
+  /* barras de energía */
+  .energias { position: absolute; z-index: 2; right: 20px; bottom: 54px; width: 150px; padding: 10px 12px 8px;
+    background: rgba(5, 8, 17, 0.72); border: 1px solid var(--hud-linea); pointer-events: none; }
+  .energias-tit { font: 600 10.5px 'Chakra Petch', sans-serif; letter-spacing: 0.2em; text-transform: uppercase; color: rgba(220,235,255,0.6); margin-bottom: 6px; }
+  .energias-graf { position: relative; height: 120px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .energias-graf::before { content: ''; position: absolute; left: -4px; right: -4px; top: 50%; height: 1px; background: rgba(220,235,255,0.35); }
+  .barra-e { position: relative; }
+  .barra-e i { position: absolute; left: 0; right: 0; transition: height .08s linear, top .08s linear; }
+  .barra-e.ec i { background: var(--hud-cian); box-shadow: 0 0 8px rgba(63,224,255,0.5); }
+  .barra-e.ep i { background: var(--hud-magenta); box-shadow: 0 0 8px rgba(255,61,127,0.5); }
+  .barra-e.em i { background: var(--hud-ambar); box-shadow: 0 0 8px rgba(255,185,46,0.5); }
+  .energias-leyenda { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 4px; text-align: center; font: 11px 'Share Tech Mono', monospace; }
+  .energias-leyenda span:nth-child(1) { color: var(--hud-cian); } .energias-leyenda span:nth-child(2) { color: var(--hud-magenta); } .energias-leyenda span:nth-child(3) { color: var(--hud-ambar); }
+
+  /* combustible */
+  .combustible { position: absolute; z-index: 2; left: 20px; bottom: 54px; width: 220px; pointer-events: none; }
+  .combustible .hud-dato { margin-bottom: 6px; }
+  .combustible-tit { display: flex; justify-content: space-between; font: 600 10.5px 'Chakra Petch', sans-serif; letter-spacing: 0.2em; text-transform: uppercase; color: rgba(220,235,255,0.6); margin-bottom: 4px; }
+  .combustible-tit b { font: 12px 'Share Tech Mono', monospace; color: var(--hud-cian); letter-spacing: 0; }
+  .combustible-pista { height: 10px; border: 1px solid var(--hud-linea-fuerte); padding: 1px; }
+  .combustible-pista i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, #3ddc84, var(--hud-cian)); transition: width .1s linear; }
+  .combustible.bajo .combustible-pista i { background: var(--hud-magenta); }
+
+  /* panel lateral */
+  .consola-lateral { min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;
+    scrollbar-width: thin; scrollbar-color: var(--hud-linea-fuerte) transparent; padding-right: 2px; }
+  .bloque-hud { position: relative; padding: 10px 14px; background: var(--hud-panel); border: 1px solid var(--hud-linea); }
+  .bloque-hud-tit { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font: 600 11.5px 'Chakra Petch', sans-serif; letter-spacing: 0.2em; text-transform: uppercase; color: var(--hud-cian); }
+  .bloque-hud-tit span { font: 11px 'Share Tech Mono', monospace; color: var(--hud-ambar); letter-spacing: 0.05em; }
+  .orden p { margin: 0; font-size: 14px; color: rgba(225,235,255,0.85); }
+  .instrumentos { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .instrumento { padding: 9px 11px; border: 1px solid var(--hud-linea); background: rgba(255,255,255,0.03); }
+  .instrumento.ancho { grid-column: 1 / -1; }
+  .instrumento-etq { font: 600 10px 'Chakra Petch', sans-serif; letter-spacing: 0.18em; text-transform: uppercase; color: rgba(220,235,255,0.55); }
+  .instrumento-valor { margin-top: 3px; font: 18px 'Share Tech Mono', monospace; color: var(--hud-blanco); }
+  .instrumento-valor small { font-size: 12px; color: rgba(220,235,255,0.6); margin-left: 4px; }
+  .instrumento-sub { font: 11px 'Share Tech Mono', monospace; color: rgba(220,235,255,0.45); }
+  .instrumento.destino { border-color: rgba(255,185,46,0.5); }
+  .instrumento.destino .instrumento-valor { color: var(--hud-ambar); }
+
+  .paso-hud.bloqueado { opacity: 0.45; pointer-events: none; }
+  .predicciones { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .prediccion { padding: 8px 6px; border: 1px solid var(--hud-linea-fuerte); background: rgba(255,255,255,0.03); color: var(--hud-blanco); cursor: pointer;
+    font: 600 11.5px 'Chakra Petch', sans-serif; letter-spacing: 0.12em; text-transform: uppercase; }
+  .prediccion:hover { border-color: var(--hud-blanco); }
+  .prediccion.activa { background: var(--hud-ambar); border-color: var(--hud-ambar); color: #1a1100; }
+  .paso-nota { margin: 6px 0 0; font-size: 12.5px; color: rgba(220,235,255,0.55); }
+  .maniobra-entrada { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+  .maniobra-entrada .simbolo { font: 18px 'Share Tech Mono', monospace; color: var(--hud-ambar); }
+  .maniobra-entrada input { padding: 8px 12px; border: 1px solid var(--hud-linea-fuerte); background: rgba(0,0,0,0.35); color: var(--hud-blanco);
+    font: 18px 'Share Tech Mono', monospace; }
+  .maniobra-entrada input:focus { outline: none; border-color: var(--hud-ambar); }
+  .maniobra-entrada .in-mantisa { width: 110px; } .maniobra-entrada .in-exp { width: 62px; }
+  .maniobra-entrada .por-diez, .maniobra-entrada .unidad { font: 16px 'Share Tech Mono', monospace; color: rgba(220,235,255,0.7); }
+  .maniobra-previa { min-height: 18px; font: 12.5px 'Share Tech Mono', monospace; color: rgba(220,235,255,0.6); margin-bottom: 8px; }
+  .maniobra-previa.error { color: var(--hud-magenta); }
+  .consola .btn-mantener { width: 100%; min-height: 50px; }
+
+  /* ejecución y resultado */
+  .consola-cuerpo { transition: grid-template-columns .7s ease; }
+  .consola-cuerpo.resultado { grid-template-columns: minmax(0, 1fr) minmax(420px, 1.3fr); }
+  .consola-vista { transition: opacity .7s ease, filter .7s ease; }
+  .consola-cuerpo.resultado .consola-vista { opacity: 0.35; filter: saturate(0.4) blur(1.5px); }
+  .consola-lateral.ejecutando { justify-content: center; }
+  .ejecucion { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 28px 20px; text-align: center; }
+  .ejec-hex { width: 92px; height: 92px; filter: drop-shadow(0 0 12px rgba(63,224,255,0.5)); }
+  .ejec-hex svg { width: 100%; height: 100%; overflow: visible; }
+  .ejec-hex polygon { fill: none; transform-origin: 60px 60px; }
+  .ejec-titulo { font: 700 24px 'Chakra Petch', sans-serif; letter-spacing: 0.18em; text-transform: uppercase; color: var(--hud-ambar); }
+  .ejec-titulo::after { content: '_'; animation: parpadeo 1s steps(1) infinite; }
+  .ejec-dato { font: 13px 'Share Tech Mono', monospace; color: rgba(220,235,255,0.65); }
+  .ejec-dato b { color: var(--hud-cian); font-weight: 400; }
+  .ejec-fases { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 8px; text-align: left; min-width: 260px; }
+  .ejec-fases li { display: flex; align-items: center; gap: 10px; font: 600 12.5px 'Chakra Petch', sans-serif; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(220,235,255,0.35); }
+  .ejec-fases li::before { content: ''; width: 8px; height: 8px; border: 1.5px solid currentColor; transform: rotate(45deg); flex: none; }
+  .ejec-fases li.hecha { color: rgba(126,226,168,0.85); }
+  .ejec-fases li.hecha::before { background: currentColor; }
+  .ejec-fases li.actual { color: var(--hud-ambar); }
+  .ejec-fases li.actual::before { background: currentColor; animation: latido 1s ease-in-out infinite; }
+  .ejec-fases li.alerta.actual { color: var(--hud-magenta); }
+  .consola-lateral.informe > * { animation: entrarInforme .5s ease-out backwards; }
+  .consola-lateral.informe > *:nth-child(2) { animation-delay: .12s; }
+  .consola-lateral.informe > *:nth-child(3) { animation-delay: .24s; }
+  .consola-lateral.informe > *:nth-child(4) { animation-delay: .36s; }
+  .consola-lateral.informe > *:nth-child(n+5) { animation-delay: .48s; }
+  @keyframes entrarInforme { from { opacity: 0; transform: translateX(16px); } }
+  .informe-sim { margin: -2px 0 10px; font: 600 12.5px 'Chakra Petch', sans-serif; letter-spacing: 0.12em; text-transform: uppercase; }
+  .informe-sim.ok { color: #7ee2a8; } .informe-sim.mal { color: var(--hud-magenta); }
+
+  /* informe */
+  .informe-estrellas { text-align: center; font-size: 40px; letter-spacing: 8px; color: var(--hud-ambar); }
+  .informe-estrellas span { display: inline-block; animation: pop .5s backwards; }
+  .informe-estrellas .apagada { color: rgba(255,255,255,0.15); }
+  .informe-resumen { text-align: center; font: 600 13px 'Chakra Petch', sans-serif; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(225,235,255,0.8); }
+  .informe-tabla { width: 100%; border-collapse: collapse; font: 13px 'Share Tech Mono', monospace; }
+  .informe-tabla td { padding: 6px 4px; border-bottom: 1px solid rgba(200,230,255,0.1); }
+  .informe-tabla td:last-child { text-align: right; color: var(--hud-blanco); }
+  .informe-tabla td:first-child { color: rgba(220,235,255,0.6); }
+  .informe-escala { margin-top: 6px; font: 11px 'Share Tech Mono', monospace; color: rgba(220,235,255,0.45); }
+  .informe-pista { padding: 10px 12px; border-left: 2px solid var(--hud-magenta); background: rgba(255,61,127,0.07); font-size: 13.5px; color: rgba(240,225,235,0.92); }
+  .informe-pista b { display: block; font: 600 11px 'Chakra Petch', sans-serif; letter-spacing: 0.18em; text-transform: uppercase; color: var(--hud-magenta); margin-bottom: 4px; }
+  .informe-pred { font-size: 13.5px; color: rgba(225,235,255,0.85); }
+  .informe-pred .ok { color: #7ee2a8; } .informe-pred .mal { color: var(--hud-magenta); }
+  .consola .pasos { margin: 0; padding-left: 18px; font-size: 13.5px; }
+  .consola .pasos li { margin-bottom: 8px; color: rgba(225,235,255,0.85); }
+
+  @media (min-width: 861px) and (min-height: 600px) {
+    body.vista-consola { height: 100vh; height: 100dvh; overflow: hidden; display: flex; flex-direction: column; }
+    body.vista-consola .barra { flex: none; }
+    body.vista-consola .app { flex: 1; min-height: 0; width: 100%; display: flex; flex-direction: column; padding-top: 14px; padding-bottom: 16px; max-width: 1320px; }
+    body.vista-consola .consola { flex: 1; min-height: 0; }
+    body.vista-consola .consola-vista { min-height: 0; }
+  }
+  @media (max-width: 860px) {
+    .consola-cuerpo { grid-template-columns: 1fr; }
+    .consola-vista { min-height: 380px; }
+    .energias { width: 120px; } .energias-graf { height: 90px; }
+    .combustible { width: 140px; }
+  }
+</style>
+<script>
+/* =====================================================================
+ * Misión «Ascenso orbital»: consola, simulador de la maniobra e informe
+ * ===================================================================== */
+
+function pantallaAscenso(m) {
+  limpiarVista();
+  E.mision = m;
+  document.body.classList.add('vista-consola');
+  const s = m.escena;
+  const r1 = s.R + s.h1 * 1e3, r2 = s.R + s.h2 * 1e3;
+  const claveP = 'prediccion-' + m.id;
+  let prediccion = null;
+  try { prediccion = sessionStorage.getItem(claveP); } catch (e) { /* sin almacenamiento */ }
+
+  app.innerHTML = `
+    <section class="consola">
+      <header class="consola-cab">
+        <span class="consola-icono">${iconoMision(m)}</span>
+        <div>
+          <div class="consola-kicker">MSN-${m.id} · Consola de dinámica de vuelo</div>
+          <h1>${esc(m.titulo)}</h1>
+        </div>
+        <span class="dificultad">${dificultad(m.estrellas)}</span>
+        <span class="en-curso">🔒 Misión en curso · no se puede abandonar</span>
+      </header>
+      <div class="consola-cuerpo">
+        <div class="consola-vista" id="vista">
+          <div class="esquinas"><span></span></div>
+          <div class="vista-hud vista-telemetria" id="telemetria"></div>
+          <div class="vista-hud vista-fase">
+            <div class="fase" id="fase">Órbita de aparcamiento</div>
+            <div class="hud-nombre">${esc(s.satelite)} · ${esc(s.planeta)}</div>
+            <div class="hud-dato">RADIO DEL PLANETA <b>${formatoNum(s.R)} m</b></div>
+            <div class="hud-dato">MASA DEL PLANETA <b class="corrupto" id="masa-corrupta">░▒▓█▓▒░</b></div>
+          </div>
+          <div class="combustible" id="combustible">
+            <div class="hud-dato">MASA DEL SATÉLITE <b>${formatoNum(s.m, 4)} kg</b></div>
+            <div class="combustible-tit">Combustible <b id="comb-pct">100 %</b></div>
+            <div class="combustible-pista"><i id="comb-barra"></i></div>
+          </div>
+          <div class="energias">
+            <div class="energias-tit">Energía</div>
+            <div class="energias-graf">
+              <div class="barra-e ec"><i id="bar-ec"></i></div>
+              <div class="barra-e ep"><i id="bar-ep"></i></div>
+              <div class="barra-e em"><i id="bar-em"></i></div>
+            </div>
+            <div class="energias-leyenda"><span>Ec</span><span>Ep</span><span>Em</span></div>
+          </div>
+          <div class="vista-hud vista-mensaje" id="mensaje"></div>
+        </div>
+        <aside class="consola-lateral" id="lateral">
+          <div class="bloque-hud orden">
+            <div class="bloque-hud-tit">Orden de Control de Misión</div>
+            <p>${esc(m.historia)}</p>
+          </div>
+          <div class="bloque-hud paso-hud" id="paso-pred">
+            <div class="bloque-hud-tit"><span>01</span> Predicción</div>
+            <p class="orden" style="margin:0 0 8px;font-size:14px;color:rgba(225,235,255,.85)">En la órbita de destino, el satélite irá…</p>
+            <div class="predicciones">
+              <button type="button" class="prediccion" data-p="rapido">Más rápido</button>
+              <button type="button" class="prediccion" data-p="igual">Igual</button>
+              <button type="button" class="prediccion" data-p="lento">Más despacio</button>
+            </div>
+            <p class="paso-nota">No puntúa: lo comprobarás al final.</p>
+          </div>
+          <div class="bloque-hud paso-hud" id="paso-maniobra">
+            <div class="bloque-hud-tit"><span>02</span> Programar la maniobra</div>
+            <div class="maniobra-entrada">
+              <span class="simbolo">ΔE =</span>
+              <input class="in-mantisa" id="m0" inputmode="decimal" placeholder="mantisa" aria-label="Mantisa">
+              <span class="por-diez">·10^</span>
+              <input class="in-exp" id="e0" inputmode="numeric" placeholder="exp" aria-label="Exponente">
+              <span class="unidad">J</span>
+            </div>
+            <div class="maniobra-previa" id="previa">Energía que aportarán los motores.</div>
+            <button id="btn-ejecutar" class="btn-hud btn-mantener" type="button" aria-label="Mantén pulsado para ejecutar la maniobra">
+              <span class="relleno"></span>
+              <svg class="icono" viewBox="0 0 20 20" aria-hidden="true"><polygon points="10,1 19,10 10,19 1,10" fill="none" stroke="currentColor" stroke-width="2"/><polygon points="10,6 14,10 10,14 6,10" fill="currentColor"/></svg>
+              <span class="txt">Mantén para ejecutar</span>
+            </button>
+          </div>
+        </aside>
+      </div>
+    </section>`;
+
+  // la masa del planeta «parpadea» con caracteres basura: el registro está dañado
+  const masa = $('#masa-corrupta');
+  const basura = '░▒▓█▚▞#@%&?¿¤§0123456789·';
+  const ruido = setInterval(() => {
+    if (!masa.isConnected) return clearInterval(ruido);
+    const n = 5 + Math.floor(Math.random() * 5);
+    let t = '';
+    for (let i = 0; i < n; i++) t += basura[Math.floor(Math.random() * basura.length)];
+    masa.textContent = Math.random() < 0.12 ? 'ERR 0x' + Math.floor(Math.random() * 4096).toString(16).toUpperCase() : t + ' kg';
+  }, 110);
+
+  E.sim = crearSimAscenso($('#vista'), { R: s.R, r1: r1, r2: r2, v1: s.v1, m: s.m, color: s.color, alFase: faseEjecucion });
+
+  // predicción
+  const pasoManiobra = $('#paso-maniobra');
+  const marcarPred = () => {
+    app.querySelectorAll('.prediccion').forEach(b => b.classList.toggle('activa', b.dataset.p === prediccion));
+    pasoManiobra.classList.toggle('bloqueado', !prediccion);
+  };
+  app.querySelectorAll('.prediccion').forEach(b => b.addEventListener('click', () => {
+    prediccion = b.dataset.p;
+    try { sessionStorage.setItem(claveP, prediccion); } catch (e) { /* sin almacenamiento */ }
+    marcarPred();
+  }));
+  marcarPred();
+
+  // vista previa del número
+  const previa = $('#previa');
+  const actualizarPrevia = () => {
+    const v = leerNumeroCliente($('#m0').value, $('#e0').value);
+    if (!$('#m0').value.trim() && !$('#e0').value.trim()) { previa.textContent = 'Energía que aportarán los motores.'; previa.classList.remove('error'); return null; }
+    if (v === null) { previa.textContent = 'Formato no válido'; previa.classList.add('error'); return null; }
+    previa.classList.remove('error');
+    previa.textContent = 'ΔE = ' + formatoNum(v, 4) + ' J';
+    return v;
+  };
+  ['#m0', '#e0'].forEach(sel => $(sel).addEventListener('input', actualizarPrevia));
+
+  // ejecutar (mantener pulsado): entrega, simula y muestra el informe
+  const boton = $('#btn-ejecutar'), txt = boton.querySelector('.txt');
+  const mantener = botonMantener(boton, 900, async () => {
+    const valor = actualizarPrevia();
+    if (valor === null) {
+      aviso('Escribe la energía en notación científica antes de ejecutar.');
+      mantener.reiniciar();
+      return;
+    }
+    txt.textContent = 'Transmitiendo…';
+    E.estrellasAntes = E.inicio.estrellas;
+    let res;
+    try {
+      res = await llamar('entregarMision', m.id, [{ m: $('#m0').value.trim(), e: $('#e0').value.trim() }], { prediccion: prediccion });
+    } catch (err) {
+      aviso(mensajeError(err));
+      txt.textContent = 'Mantén para ejecutar';
+      mantener.reiniciar();
+      return;
+    }
+    try { sessionStorage.removeItem(claveP); } catch (e) { /* sin almacenamiento */ }
+    E.inicio = res.inicio;
+    pintarBarra();
+    $('.en-curso').textContent = '⏳ Ejecutando maniobra';
+    mostrarEjecucion(`ΔE programada <b>${formatoNum(valor, 4)} J</b>`, [['encendido1', 'Encendido 1 · inyección'], ['transferencia', 'Transferencia'], ['encendido2', 'Encendido 2 · circularización'], ['final', 'Órbita final']]);
+    E.sim.ejecutar(valor, resultadoSim => informeAscenso(m, res, valor, resultadoSim));
+  }, () => {
+    txt.textContent = 'Mantén pulsado…';
+    clearTimeout(boton._t);
+    boton._t = setTimeout(() => { txt.textContent = 'Mantén para ejecutar'; }, 1400);
+  });
+}
+
+/** Panel derecho mientras se ejecuta la maniobra: solo el estado, un dato y las fases. Lo usan todas las consolas. */
+function mostrarEjecucion(datoHtml, fases, titulo) {
+  const lateral = $('#lateral');
+  lateral.classList.add('ejecutando');
+  lateral.innerHTML = `
+    <div class="bloque-hud ejecucion">
+      <div class="ejec-hex"><svg viewBox="0 0 120 120" aria-hidden="true">
+        <polygon class="hex-ext" points="60,8 105,34 105,86 60,112 15,86 15,34"/>
+        <polygon class="hex-int" points="60,26 89.4,43 89.4,77 60,94 30.6,77 30.6,43"/>
+        <polygon class="hex-nucleo" points="60,48 72,60 60,72 48,60"/>
+      </svg></div>
+      <div class="ejec-titulo">${titulo || 'Ejecutando maniobra'}</div>
+      <div class="ejec-dato">${datoHtml}</div>
+      <ol class="ejec-fases" id="ejec-fases">${fases.map(f => `<li data-f="${f[0]}">${f[1]}</li>`).join('')}</ol>
+    </div>`;
+}
+
+/** Marca en el panel derecho la fase en curso (y las anteriores como hechas). */
+function faseEjecucion(f, nombre) {
+  const lista = $('#ejec-fases');
+  if (!lista) return;
+  if (!lista.querySelector('[data-f="' + f + '"]')) {
+    // fases fuera del guion (escape, abortada): sustituyen a lo que quedaba por hacer
+    lista.querySelectorAll('li:not(.hecha):not(.actual)').forEach(li => li.remove());
+    const li = document.createElement('li');
+    li.dataset.f = f; li.textContent = nombre; li.className = 'alerta';
+    lista.appendChild(li);
+  }
+  let pasada = false;
+  lista.querySelectorAll('li').forEach(li => {
+    const es = li.dataset.f === f;
+    if (es) pasada = true;
+    li.classList.toggle('actual', es);
+    li.classList.toggle('hecha', !pasada);
+  });
+}
+
+function informeAscenso(m, res, valor, resultadoSim) {
+  $('.consola-cuerpo').classList.add('resultado');
+  const s = m.escena;
+  const lateral = $('#lateral');
+  const estrellas = Array.from({ length: m.estrellas }, (_, i) =>
+    `<span style="animation-delay:${0.15 + i * 0.25}s" class="${i < res.estrellas ? '' : 'apagada'}">★</span>`).join('');
+  const textosPred = { rapido: 'más rápido', igual: 'igual de rápido', lento: 'más despacio' };
+  const v2 = res.extra ? res.extra.v2 : null;
+  const pred = res.prediccion
+    ? `<p class="informe-pred">Predijiste que iría <b class="${res.prediccion === 'lento' ? 'ok' : 'mal'}">${textosPred[res.prediccion]}</b>.
+        ${res.prediccion === 'lento' ? '¡Correcto!' : 'En realidad va más despacio.'}
+        Pasa de ${formatoNum(s.v1)} m/s a ${formatoNum(v2)} m/s: en una órbita más alta el satélite va más lento, aunque tiene más energía mecánica.</p>`
+    : '';
+  const titulo = res.estrellas === 3 ? 'Maniobra perfecta' : res.estrellas > 0 ? 'Maniobra aceptable' : 'Maniobra fallida';
+
+  lateral.classList.remove('ejecutando');
+  lateral.classList.add('informe');
+  lateral.innerHTML = `
+    <div class="bloque-hud">
+      <div class="bloque-hud-tit">Informe de misión</div>
+      ${resultadoSim ? `<div class="informe-sim ${resultadoSim.ok ? 'ok' : 'mal'}">${esc(resultadoSim.texto)}</div>` : ''}
+      <div class="informe-estrellas">${estrellas}</div>
+      <div class="informe-resumen">${titulo} · ${res.estrellas} de ${m.estrellas} ★</div>
+    </div>
+    <div class="bloque-hud">
+      <div class="bloque-hud-tit">Presupuesto energético</div>
+      <table class="informe-tabla">
+        <tr><td>Tu ΔE</td><td>${formatoNum(valor, 4)} J</td></tr>
+        <tr><td>ΔE necesaria</td><td>${formatoNum(res.sol, 4)} J</td></tr>
+        <tr><td>Error relativo</td><td>${res.error === null ? 'signo incorrecto' : res.error < 0.0001 ? '< 0,01 %' : formatoNum(res.error * 100, 3) + ' %'}</td></tr>
+      </table>
+      <div class="informe-escala">${textoEscala(m.estrellas)}</div>
+    </div>
+    ${res.pista ? `<div class="informe-pista"><b>Diagnóstico</b>${esc(res.pista)}</div>` : ''}
+    ${pred ? `<div class="bloque-hud"><div class="bloque-hud-tit">Tu predicción</div>${pred}</div>` : ''}
+    <div class="bloque-hud">
+      <div class="bloque-hud-tit">Resolución</div>
+      <ol class="pasos">${res.pasos.map(p => `<li>${p}</li>`).join('')}</ol>
+    </div>
+    <button id="btn-volver" class="btn-hud principal" type="button">Volver al registro de misiones</button>`;
+  renderMates(lateral);
+  lateral.scrollTop = 0;
+  $('.en-curso').textContent = '✓ Misión completada';
+  $('#btn-volver').addEventListener('click', pantallaPanel);
+  celebrar(E.estrellasAntes, res.inicio.estrellas, res.inicio.objetivo);
+}
+
+/* --------------------------- Simulador ---------------------------- */
+
+/**
+ * Vista orbital de la maniobra. Unidades normalizadas: r1 = 1, GM = 1 (velocidad en unidades de v1).
+ * ejecutar(ΔE) → transferencia con dos encendidos (Hohmann) hasta la órbita que corresponde a esa energía.
+ */
+function crearSimAscenso(cont, p) {
+  const lienzo = document.createElement('canvas');
+  cont.insertBefore(lienzo, cont.firstChild);
+  const ctx = lienzo.getContext('2d');
+  let W = 0, H = 0;
+  const estrellasFondo = Array.from({ length: 160 }, () => ({ x: Math.random(), y: Math.random(), r: Math.random() * 1.1 + 0.2, a: Math.random() * 0.6 + 0.2 }));
+  const ajustar = () => {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = cont.clientWidth; H = cont.clientHeight;
+    lienzo.width = W * dpr; lienzo.height = H * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  };
+  const ro = new ResizeObserver(ajustar);
+  ro.observe(cont);
+  ajustar();
+
+  const Rn = p.R / p.r1, r2n = p.r2 / p.r1;
+  const GM = p.v1 * p.v1 * p.r1;
+  const dEok = 0.5 * p.m * p.v1 * p.v1 * (1 - 1 / r2n);
+  const capacidad = 2 * dEok;           // el depósito da para el doble de lo necesario
+  const unidadE = p.m * p.v1 * p.v1;    // |Ep| en la órbita inicial (para escalar las barras)
+
+  // estado dinámico (normalizado)
+  let x = 1, y = 0, vx = 0, vy = 1;
+  let fase = 'espera', estela = [], destino = null, tFase = 0, angAcum = 0, angPrevio = 0, alFinal = null, detenido = false;
+  let combustible = 1;
+  const tel = $('#telemetria'), elFase = $('#fase');
+  const hDestino = Math.round((p.r2 - p.R) / 1000);
+
+  const nombresFase = { espera: 'Órbita de aparcamiento', encendido1: 'Encendido 1 · inyección', transferencia: 'Transferencia', encendido2: 'Encendido 2 · circularización', final: 'Órbita final', escape: 'Trayectoria de escape', abortada: 'Maniobra abortada' };
+  const ponerFase = f => { fase = f; tFase = 0; elFase.textContent = nombresFase[f] || f; if (p.alFase) p.alFase(f, nombresFase[f] || f); };
+
+  function paso(dt) {
+    const r3 = Math.pow(x * x + y * y, 1.5);
+    vx += -x / r3 * dt / 2; vy += -y / r3 * dt / 2;
+    x += vx * dt; y += vy * dt;
+    const r3b = Math.pow(x * x + y * y, 1.5);
+    vx += -x / r3b * dt / 2; vy += -y / r3b * dt / 2;
+  }
+  function circular(r) {
+    // velocidad circular tangente en sentido antihorario
+    const rr = Math.hypot(x, y), v = Math.sqrt(1 / r);
+    vx = -y / rr * v; vy = x / rr * v;
+  }
+
+  /** Ángulo recorrido desde la última llamada (para contar media vuelta o una vuelta). */
+  function girar() {
+    const a = Math.atan2(y, x);
+    let d = a - angPrevio; if (d < -Math.PI) d += 2 * Math.PI; if (d > Math.PI) d -= 2 * Math.PI;
+    angAcum += d; angPrevio = a;
+  }
+
+  function avanzar(dtVis) {
+    if (detenido) return;
+    let dtN = dtVis * (2 * Math.PI / 6);     // 1 vuelta de la órbita inicial ≈ 6 s
+    // las transferencias largas se aceleran (unos 4 s), la vuelta final dura como mucho 3 s y el escape va al doble
+    if (fase === 'transferencia' && destino) dtN *= Math.max(1, Math.PI * Math.pow((1 + destino.ra) / 2, 1.5) / (4 * 2 * Math.PI / 6));
+    if (fase === 'final' && destino) dtN *= Math.max(1, Math.pow(destino.ra, 1.5) * 6 / 3);
+    if (fase === 'escape') dtN *= 2;
+    tFase += dtVis;
+    if (fase === 'encendido1' && tFase > 0.9) {
+      // impulso tangencial para que el apoastro quede en el radio destino
+      const v = Math.hypot(vx, vy), vNueva = destino.vp;
+      vx *= vNueva / v; vy *= vNueva / v;
+      ponerFase(destino.escapa ? 'escape' : 'transferencia');
+      angAcum = 0; angPrevio = Math.atan2(y, x);
+    }
+    if (fase === 'encendido2' && tFase > 0.9) {
+      circular(destino.ra);
+      ponerFase('final');
+      angAcum = 0; angPrevio = Math.atan2(y, x);
+    }
+    const sub = Math.max(1, Math.ceil(dtN / 0.002));
+    for (let i = 0; i < sub; i++) paso(dtN / sub);
+    if (fase === 'transferencia') { girar(); if (angAcum >= Math.PI) ponerFase('encendido2'); }
+    if (fase === 'final') { girar(); if (angAcum >= 2 * Math.PI) terminar('orbita'); }
+    if (fase === 'escape' && tFase > 15) terminar('escape');
+    if (fase === 'abortada' && tFase > 1.5) terminar('abortada');
+    if (fase !== 'espera') { estela.push([x, y]); if (estela.length > 1600) estela.shift(); }
+  }
+
+  /** Detiene la simulación, escribe el resultado sobre la vista y avisa a quien la lanzó. */
+  function terminar(motivo) {
+    if (detenido) return;
+    detenido = true;
+    const msg = $('#mensaje');
+    let texto, ok = false;
+    if (motivo === 'abortada') texto = 'Maniobra abortada: los motores no pueden aportar energía negativa';
+    else if (motivo === 'escape') texto = '¡Demasiada energía! El satélite escapa del planeta';
+    else if (motivo === 'fuera') texto = 'Fuera del alcance del radar: el satélite se pasa de la órbita de destino';
+    else {
+      const desv = destino.ra / r2n - 1, hFinal = (destino.ra * p.r1 - p.R) / 1000;
+      ok = Math.abs(desv) < 0.01;
+      texto = ok ? 'Órbita de destino alcanzada' : (desv < 0 ? 'Se queda por debajo' : 'Se pasa de la órbita') + ' · h = ' + formatoNum(hFinal, 4) + ' km';
+    }
+    msg.textContent = texto;
+    msg.className = 'vista-hud vista-mensaje ' + (ok ? 'ok' : 'mal');
+    if (alFinal) { const f = alFinal; alFinal = null; setTimeout(() => f({ texto: texto, ok: ok }), 700); }
+  }
+
+  function dibujarPlaneta(cx, cy, rad, t) {
+    const halo = ctx.createRadialGradient(cx, cy, rad * 0.9, cx, cy, rad * 1.35);
+    halo.addColorStop(0, p.color + '55'); halo.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = halo; ctx.beginPath(); ctx.arc(cx, cy, rad * 1.35, 0, Math.PI * 2); ctx.fill();
+    const gr = ctx.createRadialGradient(cx - rad * 0.35, cy - rad * 0.35, rad * 0.1, cx, cy, rad);
+    gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.12, p.color); gr.addColorStop(1, '#05070e');
+    ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(cx, cy, rad, 0, Math.PI * 2); ctx.fill();
+    ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, rad, 0, Math.PI * 2); ctx.clip();
+    ctx.globalAlpha = 0.18; ctx.fillStyle = '#000';
+    for (let i = -3; i <= 3; i++) { ctx.fillRect(cx - rad, cy + i * rad * 0.28 + Math.sin(t * 0.2 + i) * 2, rad * 2, rad * 0.08); }
+    ctx.restore(); ctx.globalAlpha = 1;
+  }
+  function anillo(cx, cy, rad, color, etiqueta, ang) {
+    ctx.save(); ctx.setLineDash([5, 7]); ctx.strokeStyle = color; ctx.lineWidth = 1.3;
+    ctx.beginPath(); ctx.arc(cx, cy, rad, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+    if (etiqueta) {
+      ctx.font = '600 11px "Chakra Petch", sans-serif'; ctx.fillStyle = color; ctx.textAlign = 'left';
+      ctx.fillText(etiqueta, cx + rad * Math.cos(ang) + 6, cy - rad * Math.sin(ang) - 4);
+    }
+  }
+  function satelite(sx, sy, ang, llama) {
+    ctx.save(); ctx.translate(sx, sy); ctx.rotate(ang);
+    if (llama) {
+      const l = 10 + Math.random() * 8;
+      const g = ctx.createLinearGradient(-6, 0, -6 - l, 0);
+      g.addColorStop(0, '#fff6c4'); g.addColorStop(0.4, '#ffb92e'); g.addColorStop(1, 'rgba(255,90,40,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(-5, -3); ctx.lineTo(-6 - l, 0); ctx.lineTo(-5, 3); ctx.fill();
+    }
+    ctx.fillStyle = '#5aa9ff'; ctx.fillRect(-4, -12, 8, 7); ctx.fillRect(-4, 5, 8, 7);
+    ctx.fillStyle = '#e8edf5'; ctx.fillRect(-5, -4, 10, 8);
+    ctx.fillStyle = '#ffb92e'; ctx.fillRect(3, -1.5, 3, 3);
+    ctx.restore();
+  }
+
+  function actualizarHud() {
+    const r = Math.hypot(x, y), v = Math.hypot(vx, vy);
+    const rReal = r * p.r1, vReal = v * p.v1;
+    const h = (rReal - p.R) / 1000;
+    tel.innerHTML = `ALTITUD <b>${formatoNum(h, 4)} km</b><br>VELOCIDAD <b>${formatoNum(vReal, 4)} m/s</b><br><span class="hud-destino">ÓRBITA DE DESTINO <b>${hDestino} km</b></span>`;
+    const ec = 0.5 * p.m * vReal * vReal, ep = -GM * p.m / rReal, em = ec + ep;
+    const barra = (id, e) => {
+      const el = $(id); const f = Math.max(-1, Math.min(1, e / unidadE));
+      el.style.height = Math.abs(f) * 50 + '%';
+      el.style.top = f >= 0 ? (50 - f * 50) + '%' : '50%';
+    };
+    barra('#bar-ec', ec); barra('#bar-ep', ep); barra('#bar-em', em);
+    const pct = Math.max(0, Math.round(combustible * 100));
+    $('#comb-pct').textContent = pct + ' %';
+    $('#comb-barra').style.width = pct + '%';
+    $('#combustible').classList.toggle('bajo', pct < 20);
+  }
+
+  let vivo = true, previo = performance.now(), t = 0;
+  function bucle(ahora) {
+    if (!vivo) return;
+    const dt = Math.min(0.05, (ahora - previo) / 1000);
+    previo = ahora; t += dt;
+    avanzar(dt);
+    // consumo de combustible durante los encendidos
+    if (destino && (fase === 'encendido1' || fase === 'encendido2')) {
+      const objetivo = 1 - Math.min(1, destino.dE / capacidad) * (fase === 'encendido1' ? destino.parte1 : 1);
+      combustible += (objetivo - combustible) * Math.min(1, dt * 4);
+    }
+
+    ctx.clearRect(0, 0, W, H);
+    estrellasFondo.forEach(s => { ctx.globalAlpha = s.a; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(s.x * W, s.y * H, s.r, 0, Math.PI * 2); ctx.fill(); });
+    ctx.globalAlpha = 1;
+    const cx = W / 2, cy = H / 2 + 6;
+    const alcance = destino && !destino.escapa ? Math.max(r2n, destino.ra) : r2n;
+    const k = (Math.min(W, H) * 0.42) / Math.min(alcance * 1.04, r2n * 2.6);
+    dibujarPlaneta(cx, cy, Rn * k, t);
+    anillo(cx, cy, k, 'rgba(63,224,255,0.6)', 'ACTUAL', 2.4);
+    anillo(cx, cy, r2n * k, 'rgba(255,185,46,0.75)', 'DESTINO · ' + hDestino + ' km', 0.6);
+    if (estela.length > 1) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 1.6; ctx.beginPath();
+      estela.forEach((q, i) => { const X = cx + q[0] * k, Y = cy - q[1] * k; i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); });
+      ctx.stroke();
+    }
+    const ang = Math.atan2(vy, vx);
+    const sx = cx + x * k, sy = cy - y * k;
+    if (!detenido && (fase === 'transferencia' || fase === 'escape' || fase === 'final') && (sx < -16 || sx > W + 16 || sy < -16 || sy > H + 16)) {
+      terminar(destino && destino.escapa ? 'escape' : 'fuera');
+    }
+    satelite(sx, sy, -ang, fase === 'encendido1' || fase === 'encendido2');
+    actualizarHud();
+    requestAnimationFrame(bucle);
+  }
+  requestAnimationFrame(bucle);
+
+  return {
+    ejecutar(dEalumno, alTerminar) {
+      alFinal = alTerminar;
+      estela = [];
+      $('#mensaje').textContent = '';
+      if (!(dEalumno > 0)) { ponerFase('abortada'); return; }
+      // energía final por unidad de m·v1²: Em1 = -1/2
+      const emFinal = -0.5 + dEalumno / unidadE;
+      if (emFinal >= 0) {
+        destino = { escapa: true, dE: dEalumno, vp: Math.sqrt(2 * (emFinal + 1)), parte1: 1 };
+      } else {
+        const ra = -1 / (2 * emFinal);
+        const vp = Math.sqrt(2 * ra / (1 + ra));
+        const e1 = 0.5 * (vp * vp - 1);
+        destino = { escapa: false, ra: ra, dE: dEalumno, vp: vp, parte1: e1 / (e1 + 0.5 * (1 / ra - Math.pow(vp / ra, 2))) };
+      }
+      ponerFase('encendido1');
+    },
+    destruir() { vivo = false; ro.disconnect(); lienzo.remove(); }
+  };
+}
+</script>

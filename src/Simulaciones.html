@@ -1,0 +1,381 @@
+<script>
+/* =====================================================================
+ * Simulaciones 2D (canvas) que acompañan a cada misión.
+ * crearSim(contenedor, sim) → { mostrarResultado(respuestas), destruir() }
+ * ===================================================================== */
+
+const SUPER = { '-': '⁻', '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹' };
+
+function formatoNum(x, cifras) {
+  cifras = cifras || 3;
+  if (x === null || x === undefined || !isFinite(x)) return '—';
+  if (x === 0) return '0';
+  const neg = x < 0, a = Math.abs(x);
+  let e = Math.floor(Math.log10(a));
+  let m = Number((a / Math.pow(10, e)).toFixed(cifras - 1));
+  if (m >= 10) { m /= 10; e++; }
+  let s;
+  if (e >= -2 && e <= 4) s = String(Number(a.toPrecision(cifras))).replace('.', ',');
+  else s = String(Number(m.toFixed(cifras - 1))).replace('.', ',') + '·10' + String(e).split('').map(ch => SUPER[ch]).join('');
+  return (neg ? '−' : '') + s;
+}
+
+const COLORES_CUERPO = {
+  tierra: ['#8fd3ff', '#2a7de1', '#0b2f6b'],
+  marte: ['#ffb08a', '#c1440e', '#4a1604'],
+  luna: ['#f0f0f0', '#a3a3a3', '#3d3d3d'],
+  mercurio: ['#e6dccf', '#9b8f80', '#3b342c'],
+  calisto: ['#cfc3b0', '#7d6e5c', '#2e271f'],
+  titan: ['#ffd89a', '#d1902f', '#5c3a0d'],
+  ceres: ['#d6d6d6', '#7c7c7c', '#2b2b2b']
+};
+
+function crearSim(contenedor, sim) {
+  if (!sim) return { mostrarResultado() {}, destruir() {} };
+  const lienzo = document.createElement('canvas');
+  contenedor.appendChild(lienzo);
+  const ctx = lienzo.getContext('2d');
+  let W = 0, H = 0;
+  const estrellas = Array.from({ length: 140 }, () => ({ x: Math.random(), y: Math.random(), r: Math.random() * 1.2 + 0.2, a: Math.random() * 0.6 + 0.2 }));
+
+  function ajustar() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = contenedor.clientWidth; H = contenedor.clientHeight;
+    lienzo.width = W * dpr; lienzo.height = H * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  const ro = new ResizeObserver(ajustar);
+  ro.observe(contenedor);
+  ajustar();
+
+  const tipos = { orbita: simOrbita_, escape: simEscape_, lanzamiento: simLanzamiento_, geo: simGeo_, solar: simSolar_, kepler: simKepler_ };
+  const impl = (tipos[sim.tipo] || simOrbita_)(sim);
+
+  let vivo = true, previo = performance.now(), t = 0;
+  function bucle(ahora) {
+    if (!vivo) return;
+    const dt = Math.min(0.05, (ahora - previo) / 1000);
+    previo = ahora; t += dt;
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#040816';
+    ctx.fillRect(0, 0, W, H);
+    estrellas.forEach(s => {
+      ctx.globalAlpha = s.a * (0.75 + 0.25 * Math.sin(t * 2 + s.x * 40));
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(s.x * W, s.y * H, s.r, 0, Math.PI * 2); ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+    impl.dibujar(ctx, W, H, t, dt);
+    requestAnimationFrame(bucle);
+  }
+  requestAnimationFrame(bucle);
+
+  return {
+    mostrarResultado(respuestas) { if (impl.resultado) impl.resultado(respuestas); },
+    destruir() { vivo = false; ro.disconnect(); lienzo.remove(); }
+  };
+}
+
+/* ------------------------------ Dibujo ------------------------------ */
+
+function planeta_(ctx, x, y, r, tipo, giro) {
+  const c = COLORES_CUERPO[tipo] || COLORES_CUERPO.luna;
+  const halo = ctx.createRadialGradient(x, y, r * 0.9, x, y, r * 1.25);
+  halo.addColorStop(0, tipo === 'tierra' ? 'rgba(120,190,255,0.35)' : 'rgba(255,255,255,0.08)');
+  halo.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = halo;
+  ctx.beginPath(); ctx.arc(x, y, r * 1.25, 0, Math.PI * 2); ctx.fill();
+
+  const gr = ctx.createRadialGradient(x - r * 0.35, y - r * 0.35, r * 0.1, x, y, r);
+  gr.addColorStop(0, c[0]); gr.addColorStop(0.55, c[1]); gr.addColorStop(1, c[2]);
+  ctx.fillStyle = gr;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+
+  // manchas (continentes / cráteres) que giran
+  ctx.save();
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.clip();
+  ctx.translate(x, y); ctx.rotate(giro || 0);
+  ctx.fillStyle = tipo === 'tierra' ? 'rgba(80,170,90,0.75)' : 'rgba(0,0,0,0.18)';
+  [[0.35, -0.2, 0.32, 0.2], [-0.4, 0.25, 0.25, 0.35], [0.1, 0.5, 0.2, 0.12], [-0.15, -0.55, 0.22, 0.13]].forEach(m => {
+    ctx.beginPath(); ctx.ellipse(m[0] * r, m[1] * r, m[2] * r, m[3] * r, m[0] * 3, 0, Math.PI * 2); ctx.fill();
+  });
+  ctx.restore();
+}
+
+function satelite_(ctx, x, y, ang, color) {
+  ctx.save();
+  ctx.translate(x, y); ctx.rotate(ang);
+  ctx.fillStyle = '#5aa9ff';
+  ctx.fillRect(-11, -3, 7, 6); ctx.fillRect(4, -3, 7, 6);
+  ctx.fillStyle = color || '#ffd166';
+  ctx.fillRect(-4, -4, 8, 8);
+  ctx.restore();
+}
+
+function texto_(ctx, s, x, y, opt) {
+  opt = opt || {};
+  ctx.font = (opt.peso || 600) + ' ' + (opt.tam || 13) + 'px Inter, sans-serif';
+  ctx.fillStyle = opt.color || '#cfd8ff';
+  ctx.textAlign = opt.alinear || 'left';
+  ctx.textBaseline = opt.base || 'alphabetic';
+  ctx.fillText(s, x, y);
+}
+
+function circuloDiscontinuo_(ctx, x, y, r, color) {
+  ctx.save();
+  ctx.setLineDash([5, 6]);
+  ctx.strokeStyle = color || 'rgba(160,190,255,0.55)';
+  ctx.lineWidth = 1.3;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
+  ctx.restore();
+}
+
+function flecha_(ctx, x1, y1, x2, y2, color, grosor) {
+  ctx.save();
+  ctx.strokeStyle = ctx.fillStyle = color;
+  ctx.lineWidth = grosor || 2.5;
+  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+  const a = Math.atan2(y2 - y1, x2 - x1);
+  ctx.beginPath();
+  ctx.moveTo(x2, y2);
+  ctx.lineTo(x2 - 10 * Math.cos(a - 0.4), y2 - 10 * Math.sin(a - 0.4));
+  ctx.lineTo(x2 - 10 * Math.cos(a + 0.4), y2 - 10 * Math.sin(a + 0.4));
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+
+/* -------------------------- Tipos de sim --------------------------- */
+
+/** Planeta con una o varias órbitas circulares (velocidades relativas reales). */
+function simOrbita_(s) {
+  const periodos = s.orbitas.map(o => 2 * Math.PI * Math.sqrt(Math.pow(o.r, 3) / s.GM));
+  const Tmin = Math.min.apply(null, periodos);
+  const angulos = s.orbitas.map((o, i) => -Math.PI / 2 + i * 1.2);
+  const colores = ['#ffd166', '#f72585'];
+  return {
+    dibujar(ctx, W, H, t, dt) {
+      const cx = W / 2, cy = H / 2 + 6;
+      const rmax = Math.max.apply(null, s.orbitas.map(o => o.r));
+      const k = (Math.min(W, H) * 0.42) / rmax;
+      planeta_(ctx, cx, cy, s.R * k, s.cuerpo, t * 0.15);
+      if (s.lanzamiento) {
+        ctx.save(); ctx.setLineDash([3, 5]); ctx.strokeStyle = 'rgba(255,183,3,0.8)'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(cx, cy - s.R * k); ctx.lineTo(cx, cy - s.orbitas[0].r * k); ctx.stroke(); ctx.restore();
+        texto_(ctx, '🚀', cx - 8, cy - s.R * k - 2, { tam: 16 });
+      }
+      s.orbitas.forEach((o, i) => {
+        const r = o.r * k;
+        circuloDiscontinuo_(ctx, cx, cy, r, i ? 'rgba(247,37,133,0.55)' : undefined);
+        angulos[i] += dt * (2 * Math.PI / 4) * (Tmin / periodos[i]);
+        const x = cx + r * Math.cos(angulos[i]), y = cy + r * Math.sin(angulos[i]);
+        satelite_(ctx, x, y, angulos[i], colores[i]);
+        texto_(ctx, o.etiqueta, 12, 22 + i * 18, { color: colores[i] });
+      });
+      if (s.escape) {
+        const r = s.orbitas[0].r * k;
+        flecha_(ctx, cx + r * 0.75, cy - r * 0.75, Math.min(W - 14, cx + r * 1.35), Math.max(14, cy - r * 1.3), 'rgba(255,183,3,0.85)', 2);
+        texto_(ctx, '¿escape?', W - 12, 22, { alinear: 'right', color: '#ffb703' });
+      }
+      texto_(ctx, 'Animación acelerada · tamaños a escala', W - 12, H - 12, { alinear: 'right', tam: 11, color: '#7f8bb8', peso: 500 });
+    }
+  };
+}
+
+/** Despegue desde la superficie de un astro. */
+function simEscape_(s) {
+  let y = 0;
+  return {
+    dibujar(ctx, W, H, t, dt) {
+      const R = Math.min(W, H) * 0.9;
+      const cx = W / 2, cy = H + R * 0.62;
+      planeta_(ctx, cx, cy, R, s.cuerpo, t * 0.03);
+      y = (y + dt * 60) % (H * 0.95);
+      const ry = cy - R - 6 - y;
+      ctx.globalAlpha = Math.max(0, 1 - y / (H * 0.95));
+      texto_(ctx, '🚀', cx - 11, ry, { tam: 22 });
+      ctx.globalAlpha = 1;
+      flecha_(ctx, cx + 40, cy - R - 10, cx + 40, cy - R - 90, 'rgba(255,183,3,0.9)', 2.5);
+      texto_(ctx, 'v ≥ vₑ ?', cx + 52, cy - R - 60, { color: '#ffb703', tam: 15 });
+      texto_(ctx, s.nombre.charAt(0).toUpperCase() + s.nombre.slice(1), 12, 22, { tam: 14 });
+    }
+  };
+}
+
+/** Lanzamiento horizontal: tras responder, se integra la trayectoria real. */
+function simLanzamiento_(s) {
+  let trayectoria = null, progreso = 0, resultadoTxt = '';
+  return {
+    resultado() {
+      // Unidades: r0 = 1, GM = 1 → v en unidades de la velocidad orbital
+      const f = s.v0 / Math.sqrt(s.GM / s.r0);
+      const Rp = s.R / s.r0;
+      let x = 1, y = 0, vx = 0, vy = f;
+      const dt = 0.002, puntos = [[x, y]];
+      let angulo = 0, angPrev = 0, choca = false;
+      const aceler = (x, y) => { const r3 = Math.pow(x * x + y * y, 1.5); return [-x / r3, -y / r3]; };
+      let a = aceler(x, y);
+      for (let i = 0; i < 400000; i++) {
+        vx += a[0] * dt / 2; vy += a[1] * dt / 2;
+        x += vx * dt; y += vy * dt;
+        a = aceler(x, y);
+        vx += a[0] * dt / 2; vy += a[1] * dt / 2;
+        const ang = Math.atan2(y, x);
+        let d = ang - angPrev; if (d < -Math.PI) d += 2 * Math.PI; if (d > Math.PI) d -= 2 * Math.PI;
+        angulo += d; angPrev = ang;
+        if (i % 20 === 0) puntos.push([x, y]);
+        const r = Math.hypot(x, y);
+        if (r < Rp) { choca = true; break; }
+        if (r > 6 || angulo >= 2 * Math.PI) break;
+      }
+      const escapa = f >= Math.SQRT2;
+      resultadoTxt = choca ? 'La sonda choca con la Tierra' : escapa ? 'Trayectoria abierta: la sonda escapa' : 'Órbita elíptica cerrada';
+      trayectoria = puntos;
+      progreso = 0;
+    },
+    dibujar(ctx, W, H, t, dt) {
+      const pts = trayectoria || [[1, 0], [-1, 0], [0, 1], [0, -1]];
+      let minX = -s.R / s.r0, maxX = 1, minY = -1.1, maxY = 1.1;
+      pts.forEach(p => { minX = Math.min(minX, p[0]); maxX = Math.max(maxX, p[0]); minY = Math.min(minY, p[1]); maxY = Math.max(maxY, p[1]); });
+      if (!trayectoria) { minX = -1.6; maxX = 1.6; minY = -1.6; maxY = 1.6; }
+      const k = Math.min((W - 40) / (maxX - minX), (H - 50) / (maxY - minY));
+      const ox = W / 2 - k * (minX + maxX) / 2, oy = H / 2 + k * (minY + maxY) / 2 + 8;
+      const X = u => ox + u * k, Y = v => oy - v * k;
+
+      planeta_(ctx, X(0), Y(0), (s.R / s.r0) * k, 'tierra', t * 0.1);
+      if (trayectoria) {
+        progreso = Math.min(1, progreso + dt / 4);
+        const n = Math.max(2, Math.floor(trayectoria.length * progreso));
+        ctx.strokeStyle = '#ffb703'; ctx.lineWidth = 2;
+        ctx.beginPath();
+        for (let i = 0; i < n; i++) { const p = trayectoria[i]; i ? ctx.lineTo(X(p[0]), Y(p[1])) : ctx.moveTo(X(p[0]), Y(p[1])); }
+        ctx.stroke();
+        const p = trayectoria[n - 1];
+        satelite_(ctx, X(p[0]), Y(p[1]), 0);
+        texto_(ctx, resultadoTxt, 12, 22, { color: '#ffb703', tam: 14 });
+      } else {
+        flecha_(ctx, X(1), Y(0), X(1), Y(0) - 60, '#ffb703', 2.5);
+        texto_(ctx, 'v₀', X(1) + 8, Y(0) - 40, { color: '#ffb703', tam: 15 });
+        texto_(ctx, '¿Qué trayectoria seguirá? Responde y lo verás.', 12, 22, { tam: 13 });
+      }
+      satelite_(ctx, X(1), Y(0), 0, '#ffffff');
+    }
+  };
+}
+
+/** Vista desde el polo norte: planeta que gira con una ciudad marcada. */
+function simGeo_(s) {
+  const Tvis = 8; // segundos por vuelta del planeta en pantalla
+  let sat = null, mensaje = '', ok = false;
+  return {
+    resultado(respuestas) {
+      const r0 = respuestas && respuestas[s.pregunta];
+      const valor = r0 ? leerNumeroCliente(r0.m, r0.e) : null;
+      if (valor === null) { mensaje = 'No se puede representar tu respuesta.'; return; }
+      const r = s.campo === 'h' ? valor + s.R : valor;
+      if (!(r > s.R)) { mensaje = 'Con tu respuesta el satélite estaría bajo la superficie.'; return; }
+      const T = 2 * Math.PI * Math.sqrt(r * r * r / s.GM);
+      ok = Math.abs(T / s.Trot - 1) < 0.03;
+      sat = { r: r, w: (2 * Math.PI / Tvis) * (s.Trot / T), ang: 0 };
+      mensaje = ok ? '✓ El satélite acompaña a ' + s.ciudad
+        : '✗ Con tu órbita el periodo sería ' + formatoNum(T / 3600) + ' h: el satélite ' + (T < s.Trot ? 'se adelanta' : 'se queda atrás');
+    },
+    dibujar(ctx, W, H, t, dt) {
+      const cx = W / 2, cy = H / 2 + 8;
+      const rVista = sat ? Math.min(Math.max(sat.r * 1.12, 3 * s.R), 40 * s.R) : 7.5 * s.R;
+      const k = (Math.min(W, H) * 0.44) / rVista;
+      const giro = -t * 2 * Math.PI / Tvis;
+      planeta_(ctx, cx, cy, s.R * k, s.cuerpo, giro);
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.beginPath(); ctx.arc(cx, cy, s.R * k * 0.18, 0, Math.PI * 2); ctx.fill(); // casquete polar
+      const xc = cx + s.R * k * Math.cos(giro), yc = cy + s.R * k * Math.sin(giro);
+      ctx.fillStyle = '#ff4d6d';
+      ctx.beginPath(); ctx.arc(xc, yc, 5, 0, Math.PI * 2); ctx.fill();
+      texto_(ctx, s.ciudad, xc + 8 * Math.cos(giro), yc + 8 * Math.sin(giro) + 4, { tam: 12, color: '#ffc2cd', alinear: Math.cos(giro) >= 0 ? 'left' : 'right' });
+      if (sat) {
+        sat.ang -= sat.w * dt;
+        const rr = Math.min(sat.r, 40 * s.R) * k;
+        circuloDiscontinuo_(ctx, cx, cy, rr);
+        const xs = cx + rr * Math.cos(sat.ang), ys = cy + rr * Math.sin(sat.ang);
+        ctx.save(); ctx.setLineDash([2, 4]); ctx.strokeStyle = ok ? 'rgba(74,222,128,0.8)' : 'rgba(248,113,113,0.6)';
+        ctx.beginPath(); ctx.moveTo(xc, yc); ctx.lineTo(xs, ys); ctx.stroke(); ctx.restore();
+        satelite_(ctx, xs, ys, sat.ang);
+      }
+      texto_(ctx, mensaje || 'Vista desde el polo norte. Responde para colocar tu satélite.', 12, 22, { tam: 13, color: mensaje ? (ok ? '#4ade80' : '#f87171') : '#cfd8ff' });
+      texto_(ctx, 'Animación acelerada', W - 12, H - 12, { alinear: 'right', tam: 11, color: '#7f8bb8', peso: 500 });
+    }
+  };
+}
+
+/** Estrella central con órbitas a escala (radios relativos). */
+function simSolar_(s) {
+  const angulos = s.orbitas.map((o, i) => i * 2.1);
+  const amin = Math.min.apply(null, s.orbitas.map(o => o.a));
+  return {
+    dibujar(ctx, W, H, t, dt) {
+      const cx = W / 2, cy = H / 2 + 6;
+      const amax = Math.max.apply(null, s.orbitas.map(o => o.a));
+      const k = (Math.min(W, H) * 0.42) / amax;
+      const brillo = ctx.createRadialGradient(cx, cy, 2, cx, cy, 30);
+      brillo.addColorStop(0, '#fffbe0'); brillo.addColorStop(0.35, '#ffd166'); brillo.addColorStop(1, 'rgba(255,170,0,0)');
+      ctx.fillStyle = brillo;
+      ctx.beginPath(); ctx.arc(cx, cy, 30, 0, Math.PI * 2); ctx.fill();
+      s.orbitas.forEach((o, i) => {
+        const r = o.a * k;
+        circuloDiscontinuo_(ctx, cx, cy, r);
+        angulos[i] -= dt * (2 * Math.PI / 4) * Math.pow(amin / o.a, 1.5);
+        const x = cx + r * Math.cos(angulos[i]), y = cy + r * Math.sin(angulos[i]);
+        ctx.fillStyle = o.color;
+        ctx.beginPath(); ctx.arc(x, y, 6, 0, Math.PI * 2); ctx.fill();
+        texto_(ctx, o.nombre, x + 9, y - 7, { tam: 12, color: o.color });
+      });
+      texto_(ctx, 'Distancias a escala · animación acelerada', W - 12, H - 12, { alinear: 'right', tam: 11, color: '#7f8bb8', peso: 500 });
+    }
+  };
+}
+
+/** Gráfica T² frente a r³ con los datos de las lunas. */
+function simKepler_(s) {
+  return {
+    dibujar(ctx, W, H) {
+      const m = { izq: 70, der: 20, arr: 34, aba: 46 };
+      const xmax = Math.max.apply(null, s.puntos.map(p => p.x)) * 1.1;
+      const ymax = Math.max.apply(null, s.puntos.map(p => p.y)) * 1.1;
+      const X = v => m.izq + (v / xmax) * (W - m.izq - m.der);
+      const Y = v => H - m.aba - (v / ymax) * (H - m.arr - m.aba);
+      ctx.strokeStyle = 'rgba(160,190,255,0.15)'; ctx.lineWidth = 1;
+      for (let i = 0; i <= 4; i++) {
+        const xv = xmax * i / 4, yv = ymax * i / 4;
+        ctx.beginPath(); ctx.moveTo(X(xv), Y(0)); ctx.lineTo(X(xv), Y(ymax)); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(X(0), Y(yv)); ctx.lineTo(X(xmax), Y(yv)); ctx.stroke();
+        texto_(ctx, formatoNum(xv, 2), X(xv), H - m.aba + 16, { alinear: 'center', tam: 11, color: '#9ca8d4', peso: 500 });
+        texto_(ctx, formatoNum(yv, 2), m.izq - 6, Y(yv) + 4, { alinear: 'right', tam: 11, color: '#9ca8d4', peso: 500 });
+      }
+      ctx.strokeStyle = '#9ca8d4';
+      ctx.beginPath(); ctx.moveTo(X(0), Y(ymax)); ctx.lineTo(X(0), Y(0)); ctx.lineTo(X(xmax), Y(0)); ctx.stroke();
+      texto_(ctx, 'r³ (m³)', W - m.der, H - 10, { alinear: 'right', tam: 12 });
+      texto_(ctx, 'T² (s²)', m.izq - 6, 20, { alinear: 'right', tam: 12 });
+      const pend = s.puntos.reduce((a, p) => a + p.y / p.x, 0) / s.puntos.length;
+      ctx.save(); ctx.setLineDash([6, 6]); ctx.strokeStyle = 'rgba(255,183,3,0.7)'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(X(0), Y(0)); ctx.lineTo(X(xmax), Y(pend * xmax)); ctx.stroke(); ctx.restore();
+      const orden = s.puntos.slice().sort((a, b) => a.x - b.x);
+      orden.forEach((p, i) => {
+        ctx.fillStyle = '#b388eb';
+        ctx.beginPath(); ctx.arc(X(p.x), Y(p.y), 6, 0, Math.PI * 2); ctx.fill();
+        const ultimo = i === orden.length - 1;
+        texto_(ctx, p.nombre, ultimo ? X(p.x) - 10 : X(p.x) + 10, Y(p.y) - 14 - (ultimo ? 0 : (orden.length - 2 - i) * 15),
+          { alinear: ultimo ? 'right' : 'left', tam: 12, color: '#e0ccff' });
+      });
+    }
+  };
+}
+
+/** Misma lógica que el servidor: "mantisa · 10^exponente", coma decimal. */
+function leerNumeroCliente(m, e) {
+  const ms = String(m == null ? '' : m).trim().replace(',', '.').replace(/\s/g, '');
+  const es = String(e == null ? '' : e).trim().replace('−', '-').replace(/\s/g, '');
+  if (!/^[-+]?(\d+\.?\d*|\.\d+)$/.test(ms)) return null;
+  if (es !== '' && !/^[-+]?\d+$/.test(es)) return null;
+  const v = parseFloat(ms) * Math.pow(10, es === '' ? 0 : parseInt(es, 10));
+  return isFinite(v) ? v : null;
+}
+</script>

@@ -1,0 +1,478 @@
+<style>
+  /* =================================================================
+   * Misión «Bautismo orbital»: consola de acoplamiento
+   * (reutiliza los estilos de la consola de «Ascenso orbital»)
+   * ================================================================= */
+  .vista-nave { left: 20px; bottom: 54px; }
+</style>
+<script>
+/* =====================================================================
+ * Misión «Bautismo orbital»: inserción en la órbita de una estación y
+ * acoplamiento. Una sola incógnita: la velocidad orbital.
+ * ===================================================================== */
+
+/** Texto de la escala de estrellas según el máximo de la misión (<5 % todas; cada tramo, una menos). */
+function textoEscala(max) {
+  return [5, 10, 25].slice(0, max).map((p, i) => '&lt;' + p + ' % ' + '★'.repeat(max - i)).join(' · ');
+}
+
+function pantallaAcoplamiento(m) {
+  limpiarVista();
+  E.mision = m;
+  document.body.classList.add('vista-consola');
+  const s = m.escena;
+  const r = s.R + s.h * 1e3;
+  const claveP = 'prediccion-' + m.id;
+  let prediccion = null;
+  try { prediccion = sessionStorage.getItem(claveP); } catch (e) { /* sin almacenamiento */ }
+
+  app.innerHTML = `
+    <section class="consola">
+      <header class="consola-cab">
+        <span class="consola-icono">${iconoMision(m)}</span>
+        <div>
+          <div class="consola-kicker">MSN-${m.id} · Consola de acoplamiento</div>
+          <h1>${esc(m.titulo)}</h1>
+        </div>
+        <span class="dificultad">${dificultad(m.estrellas)}</span>
+        <span class="en-curso">🔒 Misión en curso · no se puede abandonar</span>
+      </header>
+      <div class="consola-cuerpo">
+        <div class="consola-vista" id="vista">
+          <div class="esquinas"><span></span></div>
+          <div class="vista-hud vista-telemetria" id="telemetria"></div>
+          <div class="vista-hud vista-fase">
+            <div class="fase" id="fase">Esperando ventana de inserción</div>
+            <div class="hud-nombre">${esc(s.estacion)} · ${esc(s.planeta)}</div>
+            <div class="hud-dato">RADIO DEL PLANETA <b>${formatoNum(s.R)} m</b></div>
+            <div class="hud-dato">MASA DEL PLANETA <b>${formatoNum(s.M)} kg</b></div>
+            <div class="hud-dato">G <b>${formatoNum(s.G)} N·m²/kg²</b></div>
+          </div>
+          <div class="vista-hud vista-nave">
+            <div class="hud-nombre">${esc(s.nave)}</div>
+            <div class="hud-dato">MASA DE LA NAVE <b>${formatoNum(s.mNave, 5)} kg</b></div>
+          </div>
+          <div class="vista-hud vista-mensaje" id="mensaje"></div>
+        </div>
+        <aside class="consola-lateral" id="lateral">
+          <div class="bloque-hud orden">
+            <div class="bloque-hud-tit">Orden de Control de Misión</div>
+            <p>${esc(m.historia)}</p>
+          </div>
+          <div class="bloque-hud paso-hud" id="paso-pred">
+            <div class="bloque-hud-tit"><span>01</span> Predicción</div>
+            <p class="orden" style="margin:0 0 8px;font-size:14px;color:rgba(225,235,255,.85)">Si tu nave tuviera el doble de masa, para acoplarse necesitaría una velocidad…</p>
+            <div class="predicciones">
+              <button type="button" class="prediccion" data-p="mayor">Mayor</button>
+              <button type="button" class="prediccion" data-p="igual">Igual</button>
+              <button type="button" class="prediccion" data-p="menor">Menor</button>
+            </div>
+            <p class="paso-nota">No puntúa: lo comprobarás al final.</p>
+          </div>
+          <div class="bloque-hud paso-hud" id="paso-maniobra">
+            <div class="bloque-hud-tit"><span>02</span> Programar la inserción</div>
+            <div class="maniobra-entrada">
+              <span class="simbolo">v =</span>
+              <input class="in-mantisa" id="m0" inputmode="decimal" placeholder="mantisa" aria-label="Mantisa">
+              <span class="por-diez">·10^</span>
+              <input class="in-exp" id="e0" inputmode="numeric" placeholder="exp" aria-label="Exponente">
+              <span class="unidad">m/s</span>
+            </div>
+            <div class="maniobra-previa" id="previa">Velocidad con la que entrará la nave en la órbita.</div>
+            <button id="btn-ejecutar" class="btn-hud btn-mantener" type="button" aria-label="Mantén pulsado para insertar la nave">
+              <span class="relleno"></span>
+              <svg class="icono" viewBox="0 0 20 20" aria-hidden="true"><polygon points="10,1 19,10 10,19 1,10" fill="none" stroke="currentColor" stroke-width="2"/><polygon points="10,6 14,10 10,14 6,10" fill="currentColor"/></svg>
+              <span class="txt">Mantén para insertar</span>
+            </button>
+          </div>
+        </aside>
+      </div>
+    </section>`;
+
+  E.sim = crearSimAcoplamiento($('#vista'), { R: s.R, r: r, GM: s.G * s.M, h: s.h, alFase: faseEjecucion });
+
+  // predicción
+  const pasoManiobra = $('#paso-maniobra');
+  const marcarPred = () => {
+    app.querySelectorAll('.prediccion').forEach(b => b.classList.toggle('activa', b.dataset.p === prediccion));
+    pasoManiobra.classList.toggle('bloqueado', !prediccion);
+  };
+  app.querySelectorAll('.prediccion').forEach(b => b.addEventListener('click', () => {
+    prediccion = b.dataset.p;
+    try { sessionStorage.setItem(claveP, prediccion); } catch (e) { /* sin almacenamiento */ }
+    marcarPred();
+  }));
+  marcarPred();
+
+  // vista previa del número
+  const previa = $('#previa');
+  const actualizarPrevia = () => {
+    const v = leerNumeroCliente($('#m0').value, $('#e0').value);
+    if (!$('#m0').value.trim() && !$('#e0').value.trim()) { previa.textContent = 'Velocidad con la que entrará la nave en la órbita.'; previa.classList.remove('error'); return null; }
+    if (v === null) { previa.textContent = 'Formato no válido'; previa.classList.add('error'); return null; }
+    previa.classList.remove('error');
+    previa.textContent = 'v = ' + formatoNum(v, 4) + ' m/s';
+    return v;
+  };
+  ['#m0', '#e0'].forEach(sel => $(sel).addEventListener('input', actualizarPrevia));
+
+  // insertar (mantener pulsado): entrega, simula y muestra el informe
+  const boton = $('#btn-ejecutar'), txt = boton.querySelector('.txt');
+  const mantener = botonMantener(boton, 900, async () => {
+    const valor = actualizarPrevia();
+    if (valor === null) {
+      aviso('Escribe la velocidad en notación científica antes de insertar la nave.');
+      mantener.reiniciar();
+      return;
+    }
+    txt.textContent = 'Transmitiendo…';
+    E.estrellasAntes = E.inicio.estrellas;
+    let res;
+    try {
+      res = await llamar('entregarMision', m.id, [{ m: $('#m0').value.trim(), e: $('#e0').value.trim() }], { prediccion: prediccion });
+    } catch (err) {
+      aviso(mensajeError(err));
+      txt.textContent = 'Mantén para insertar';
+      mantener.reiniciar();
+      return;
+    }
+    try { sessionStorage.removeItem(claveP); } catch (e) { /* sin almacenamiento */ }
+    E.inicio = res.inicio;
+    pintarBarra();
+    $('.en-curso').textContent = '⏳ Ejecutando maniobra';
+    mostrarEjecucion(`Velocidad de inserción <b>${formatoNum(valor, 4)} m/s</b>`,
+      [['insercion', 'Inserción en órbita'], ['formacion', 'Vuelo en formación'], ['aproximacion', 'Aproximación final'], ['acoplado', 'Acoplamiento']]);
+    E.sim.ejecutar(valor, resultadoSim => informeAcoplamiento(m, res, valor, resultadoSim));
+  }, () => {
+    txt.textContent = 'Mantén pulsado…';
+    clearTimeout(boton._t);
+    boton._t = setTimeout(() => { txt.textContent = 'Mantén para insertar'; }, 1400);
+  });
+}
+
+function informeAcoplamiento(m, res, valor, resultadoSim) {
+  const s = m.escena;
+  $('.consola-cuerpo').classList.add('resultado');
+  const lateral = $('#lateral');
+  const estrellas = Array.from({ length: m.estrellas }, (_, i) =>
+    `<span style="animation-delay:${0.15 + i * 0.25}s" class="${i < res.estrellas ? '' : 'apagada'}">★</span>`).join('');
+  const textosPred = { mayor: 'una velocidad mayor', igual: 'la misma velocidad', menor: 'una velocidad menor' };
+  const pred = res.prediccion
+    ? `<p class="informe-pred">Predijiste que con el doble de masa necesitaría <b class="${res.prediccion === 'igual' ? 'ok' : 'mal'}">${textosPred[res.prediccion]}</b>.
+        ${res.prediccion === 'igual' ? '¡Correcto!' : 'En realidad necesitaría la misma velocidad.'}
+        La masa de la nave se simplifica en \\(v = \\sqrt{GM/r}\\): un carguero de ${formatoNum(s.mNave, 5)} kg y otro de ${formatoNum(2 * s.mNave, 5)} kg orbitan igual de rápido a esa altura.</p>`
+    : '';
+  const titulo = res.estrellas === m.estrellas ? 'Acoplamiento perfecto' : 'Acoplamiento fallido';
+
+  lateral.classList.remove('ejecutando');
+  lateral.classList.add('informe');
+  lateral.innerHTML = `
+    <div class="bloque-hud">
+      <div class="bloque-hud-tit">Informe de misión</div>
+      ${resultadoSim ? `<div class="informe-sim ${resultadoSim.ok ? 'ok' : 'mal'}">${esc(resultadoSim.texto)}</div>` : ''}
+      <div class="informe-estrellas">${estrellas}</div>
+      <div class="informe-resumen">${titulo} · ${res.estrellas} de ${m.estrellas} ★</div>
+    </div>
+    <div class="bloque-hud">
+      <div class="bloque-hud-tit">Velocidad de inserción</div>
+      <table class="informe-tabla">
+        <tr><td>Tu velocidad</td><td>${formatoNum(valor, 4)} m/s</td></tr>
+        <tr><td>Velocidad necesaria</td><td>${formatoNum(res.sol, 4)} m/s</td></tr>
+        <tr><td>Error relativo</td><td>${res.error === null ? 'signo incorrecto' : res.error < 0.0001 ? '< 0,01 %' : formatoNum(res.error * 100, 3) + ' %'}</td></tr>
+      </table>
+      <div class="informe-escala">${textoEscala(m.estrellas)}</div>
+    </div>
+    ${res.pista ? `<div class="informe-pista"><b>Diagnóstico</b>${esc(res.pista)}</div>` : ''}
+    ${pred ? `<div class="bloque-hud"><div class="bloque-hud-tit">Tu predicción</div>${pred}</div>` : ''}
+    <div class="bloque-hud">
+      <div class="bloque-hud-tit">Resolución</div>
+      <ol class="pasos">${res.pasos.map(p => `<li>${p}</li>`).join('')}</ol>
+    </div>
+    <button id="btn-volver" class="btn-hud principal" type="button">Volver al registro de misiones</button>`;
+  renderMates(lateral);
+  lateral.scrollTop = 0;
+  $('.en-curso').textContent = '✓ Misión completada';
+  $('#btn-volver').addEventListener('click', pantallaPanel);
+  celebrar(E.estrellasAntes, res.inicio.estrellas, res.inicio.objetivo);
+}
+
+/* --------------------------- Simulador ---------------------------- */
+
+/**
+ * Vista orbital del acoplamiento. Unidades normalizadas: r = 1, GM = 1 (velocidades en unidades de la orbital).
+ * La estación gira en su órbita circular; la nave se inserta un poco por detrás con la velocidad del alumno.
+ */
+function crearSimAcoplamiento(cont, p) {
+  const lienzo = document.createElement('canvas');
+  cont.insertBefore(lienzo, cont.firstChild);
+  const ctx = lienzo.getContext('2d');
+  let W = 0, H = 0;
+  const fondo = Array.from({ length: 160 }, () => ({ x: Math.random(), y: Math.random(), r: Math.random() * 1.1 + 0.2, a: Math.random() * 0.6 + 0.2 }));
+  const ajustar = () => {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = cont.clientWidth; H = cont.clientHeight;
+    lienzo.width = W * dpr; lienzo.height = H * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  };
+  const ro = new ResizeObserver(ajustar);
+  ro.observe(cont);
+  ajustar();
+
+  const Rn = p.R / p.r;
+  const km = n => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '\u00a0');   // 12 300
+  const vReal = Math.sqrt(p.GM / p.r);
+  const HUECO = 0.07;                         // la nave entra unos 4° por detrás de la estación
+  const tel = $('#telemetria'), elFase = $('#fase');
+
+  let ang = Math.PI * 0.62;                   // ángulo de la estación
+  let nave = null;                            // { x, y, vx, vy }
+  let fase = 'espera', tFase = 0, recorrido = 0, detenido = false, alFinal = null, ok = false;
+  let estela = [], aproxDesde = null, f = 1, sepInicial = 0;
+
+  const nombresFase = { espera: 'Esperando ventana de inserción', insercion: 'Inserción en órbita', formacion: 'Vuelo en formación',
+    aproximacion: 'Aproximación final', acoplado: 'Acoplada', deriva: 'Deriva', choque: 'Reentrada', abortada: 'Inserción abortada' };
+  const ponerFase = nf => { fase = nf; tFase = 0; recorrido = 0; elFase.textContent = nombresFase[nf] || nf; if (p.alFase) p.alFase(nf, nombresFase[nf] || nf); };
+
+  const posEstacion = () => [Math.cos(ang), Math.sin(ang)];
+  function paso(dt) {
+    const r3 = Math.pow(nave.x * nave.x + nave.y * nave.y, 1.5);
+    nave.vx += -nave.x / r3 * dt / 2; nave.vy += -nave.y / r3 * dt / 2;
+    nave.x += nave.vx * dt; nave.y += nave.vy * dt;
+    const r3b = Math.pow(nave.x * nave.x + nave.y * nave.y, 1.5);
+    nave.vx += -nave.x / r3b * dt / 2; nave.vy += -nave.y / r3b * dt / 2;
+  }
+  const separacion = () => { const e = posEstacion(); return nave ? Math.hypot(nave.x - e[0], nave.y - e[1]) : 0; };
+
+  function terminar(motivo) {
+    if (detenido) return;
+    detenido = true;
+    const msg = $('#mensaje');
+    const km = formatoNum(separacion() * p.r / 1000, 3);
+    let texto;
+    if (motivo === 'acoplado') texto = 'Acoplamiento completado';
+    else if (motivo === 'abortada') texto = 'Inserción abortada: la velocidad debe ser positiva';
+    else if (motivo === 'choque') texto = 'Demasiado lenta: la nave se hunde en la atmósfera del planeta';
+    else if (f >= Math.SQRT2) texto = '¡Demasiado rápida! La nave escapa del planeta';
+    else texto = (f < 1 ? 'Demasiado lenta: la nave baja a una órbita inferior' : 'Demasiado rápida: la nave sube a una órbita superior') + ' y se aleja · separación ' + km + ' km';
+    msg.textContent = texto;
+    msg.className = 'vista-hud vista-mensaje ' + (motivo === 'acoplado' ? 'ok' : 'mal');
+    if (alFinal) { const cb = alFinal; alFinal = null; setTimeout(() => cb({ texto: texto, ok: motivo === 'acoplado' }), 700); }
+  }
+
+  function avanzar(dtVis) {
+    if (detenido) return;
+    let dtN = dtVis * (2 * Math.PI / 8);      // 1 vuelta de la estación ≈ 8 s
+    if (fase === 'deriva') dtN *= 1.6;
+    tFase += dtVis;
+    ang += dtN;
+    if (fase === 'abortada') { if (tFase > 1.5) terminar('abortada'); return; }
+    if (!nave) return;
+    if (fase === 'aproximacion') {
+      // los propulsores de maniobra cierran el hueco: la nave se va colocando junto a la estación
+      const k = Math.min(1, tFase / 2.2), e = posEstacion();
+      const objetivo = [Math.cos(ang - 0.012), Math.sin(ang - 0.012)];
+      const base = [Math.cos(ang - aproxDesde), Math.sin(ang - aproxDesde)];
+      const suave = k * k * (3 - 2 * k);
+      nave.x = base[0] + (objetivo[0] - base[0]) * suave; nave.y = base[1] + (objetivo[1] - base[1]) * suave;
+      nave.vx = -e[1]; nave.vy = e[0];
+      if (k >= 1) { ponerFase('acoplado'); }
+    } else if (fase === 'acoplado') {
+      nave.x = Math.cos(ang - 0.012); nave.y = Math.sin(ang - 0.012);
+      if (tFase > 1.2) terminar('acoplado');
+    } else {
+      const sub = Math.max(1, Math.ceil(dtN / 0.002));
+      for (let i = 0; i < sub; i++) paso(dtN / sub);
+      recorrido += dtN;
+      if (Math.hypot(nave.x, nave.y) < Rn) { terminar('choque'); return; }
+      if (fase === 'insercion' && tFase > 0.8) {
+        if (ok) {
+          // dentro de tolerancia: los propulsores de maniobra corrigen el pequeño desvío y la nave vuela en formación
+          const rr = Math.hypot(nave.x, nave.y), vc = Math.sqrt(1 / rr);
+          nave.vx = -nave.y / rr * vc; nave.vy = nave.x / rr * vc;
+        }
+        ponerFase(ok ? 'formacion' : 'deriva');
+      }
+      if (fase === 'formacion' && recorrido > Math.PI / 2) {
+        // posición angular de la nave respecto a la estación al empezar la aproximación
+        let d = ang - Math.atan2(nave.y, nave.x);
+        while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
+        aproxDesde = d;
+        ponerFase('aproximacion');
+      }
+      if (fase === 'deriva' && (recorrido > 2 * Math.PI || separacion() > Math.max(1.2, sepInicial * 8))) terminar('deriva');
+    }
+    estela.push([nave.x, nave.y]); if (estela.length > 1500) estela.shift();
+  }
+
+  // bandas y tormentas fijas (pseudoaleatorias) para que el planeta no cambie entre fotogramas
+  let semilla = 11;
+  const azar = () => { semilla = (semilla * 9301 + 49297) % 233280; return semilla / 233280; };
+  const bandas = Array.from({ length: 14 }, (_, i) => ({
+    y: -1 + (i + 0.5) * 2 / 14, alto: 0.08 + azar() * 0.1,
+    color: ['#f0a070', '#c9573a', '#e8b48a', '#a63a26', '#f4c49a', '#8f2e1e'][i % 6], alfa: 0.35 + azar() * 0.35, vel: (azar() - 0.5) * 0.06
+  }));
+  const tormentas = [
+    { y: 0.32, x: 0.2, rx: 0.26, ry: 0.13, color: '#7a1c12', borde: '#f2b38a', vel: 0.018 },
+    { y: -0.45, x: -0.3, rx: 0.1, ry: 0.05, color: '#f6e2cf', borde: null, vel: -0.03 },
+    { y: -0.12, x: 0.55, rx: 0.08, ry: 0.04, color: '#fbe9d8', borde: null, vel: 0.025 },
+    { y: 0.62, x: -0.5, rx: 0.12, ry: 0.05, color: '#5e160d', borde: '#e79a6f', vel: -0.015 }
+  ];
+
+  /** Gigante gaseoso rojizo: bandas que se desplazan, tormentas ovaladas y oscurecimiento del borde. */
+  function dibujarTierra(cx, cy, rad, t) {
+    const halo = ctx.createRadialGradient(cx, cy, rad * 0.92, cx, cy, rad * 1.28);
+    halo.addColorStop(0, 'rgba(255,130,80,0.32)'); halo.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = halo; ctx.beginPath(); ctx.arc(cx, cy, rad * 1.28, 0, Math.PI * 2); ctx.fill();
+    ctx.save();
+    ctx.beginPath(); ctx.arc(cx, cy, rad, 0, Math.PI * 2); ctx.clip();
+    const base = ctx.createLinearGradient(cx, cy - rad, cx, cy + rad);
+    base.addColorStop(0, '#d9774c'); base.addColorStop(0.5, '#b8452c'); base.addColorStop(1, '#7e2a1a');
+    ctx.fillStyle = base; ctx.fillRect(cx - rad, cy - rad, rad * 2, rad * 2);
+    // bandas con un ligero vaivén
+    bandas.forEach(b => {
+      ctx.globalAlpha = b.alfa;
+      ctx.fillStyle = b.color;
+      const y = cy + b.y * rad, a = b.alto * rad;
+      ctx.beginPath();
+      ctx.moveTo(cx - rad, y - a / 2);
+      for (let x = -1; x <= 1.001; x += 0.1) ctx.lineTo(cx + x * rad, y - a / 2 + Math.sin(x * 6 + t * 0.4 + b.y * 9) * a * 0.18);
+      for (let x = 1; x >= -1.001; x -= 0.1) ctx.lineTo(cx + x * rad, y + a / 2 + Math.sin(x * 5 - t * 0.3 + b.y * 7) * a * 0.18);
+      ctx.fill();
+    });
+    // tormentas que derivan con la rotación
+    tormentas.forEach(o => {
+      let x = ((o.x + t * o.vel + 1.4) % 2.8) - 1.4;
+      const X = cx + x * rad, Y = cy + o.y * rad;
+      ctx.globalAlpha = 0.9;
+      if (o.borde) { ctx.fillStyle = o.borde; ctx.beginPath(); ctx.ellipse(X, Y, o.rx * rad * 1.18, o.ry * rad * 1.3, 0, 0, Math.PI * 2); ctx.fill(); }
+      ctx.fillStyle = o.color; ctx.beginPath(); ctx.ellipse(X, Y, o.rx * rad, o.ry * rad, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 0.35; ctx.strokeStyle = '#ffd9bf'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.ellipse(X, Y, o.rx * rad * 0.6, o.ry * rad * 0.55, 0, t * 0.6, t * 0.6 + 4.5); ctx.stroke();
+    });
+    ctx.globalAlpha = 1;
+    // luz y sombra: brillo arriba a la izquierda, borde oscurecido
+    const luz = ctx.createRadialGradient(cx - rad * 0.4, cy - rad * 0.4, rad * 0.05, cx, cy, rad * 1.02);
+    luz.addColorStop(0, 'rgba(255,230,210,0.35)'); luz.addColorStop(0.45, 'rgba(255,200,170,0)');
+    luz.addColorStop(0.8, 'rgba(20,4,2,0.25)'); luz.addColorStop(1, 'rgba(10,2,1,0.85)');
+    ctx.fillStyle = luz; ctx.fillRect(cx - rad, cy - rad, rad * 2, rad * 2);
+    ctx.restore();
+  }
+  function dibujarEstacion(x, y, a, esc_) {
+    ctx.save(); ctx.translate(x, y); ctx.rotate(a); ctx.scale(esc_, esc_);
+    ctx.fillStyle = '#5aa9ff';
+    ctx.fillRect(-16, -15, 32, 8); ctx.fillRect(-16, 7, 32, 8);
+    ctx.strokeStyle = '#c7d4e6'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(0, -15); ctx.lineTo(0, 15); ctx.stroke();
+    ctx.fillStyle = '#e8edf5'; ctx.fillRect(-7, -4, 14, 8);
+    ctx.fillStyle = '#ffb92e'; ctx.fillRect(7, -2, 3, 4);
+    ctx.restore();
+  }
+  function dibujarNave(x, y, a, llama) {
+    ctx.save(); ctx.translate(x, y); ctx.rotate(a);
+    if (llama) {
+      const l = 8 + Math.random() * 6;
+      const g = ctx.createLinearGradient(-5, 0, -5 - l, 0);
+      g.addColorStop(0, '#fff6c4'); g.addColorStop(0.4, '#ffb92e'); g.addColorStop(1, 'rgba(255,90,40,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(-4, -2.5); ctx.lineTo(-5 - l, 0); ctx.lineTo(-4, 2.5); ctx.fill();
+    }
+    ctx.fillStyle = '#e8edf5';
+    ctx.beginPath(); ctx.moveTo(7, 0); ctx.lineTo(1, -4); ctx.lineTo(-5, -4); ctx.lineTo(-5, 4); ctx.lineTo(1, 4); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#3fe0ff'; ctx.fillRect(-1, -1.5, 3, 3);
+    ctx.restore();
+  }
+  function camaraProximidad() {
+    const bw = 200, bh = 140, bx = W - bw - 18, by = H - bh - 54;
+    ctx.save();
+    ctx.fillStyle = 'rgba(5,8,17,0.78)'; ctx.fillRect(bx, by, bw, bh);
+    ctx.strokeStyle = 'rgba(200,230,255,0.25)'; ctx.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
+    ctx.beginPath(); ctx.rect(bx, by, bw, bh); ctx.clip();
+    ctx.strokeStyle = 'rgba(63,224,255,0.12)'; ctx.lineWidth = 1;
+    for (let i = 1; i < 6; i++) { ctx.beginPath(); ctx.moveTo(bx + i * bw / 6, by); ctx.lineTo(bx + i * bw / 6, by + bh); ctx.stroke(); }
+    for (let i = 1; i < 4; i++) { ctx.beginPath(); ctx.moveTo(bx, by + i * bh / 4); ctx.lineTo(bx + bw, by + i * bh / 4); ctx.stroke(); }
+    const cx = bx + bw / 2, cy = by + bh / 2 + 6;
+    dibujarEstacion(cx, cy, 0, 0.9);
+    let texto = 'SIN CONTACTO';
+    if (nave) {
+      const e = posEstacion();
+      const rx = nave.x - e[0], ry = nave.y - e[1];
+      const tx = -Math.sin(ang), ty = Math.cos(ang);           // dirección de avance
+      const along = rx * tx + ry * ty, radial = rx * e[0] + ry * e[1];
+      const d = Math.hypot(along, radial);
+      const k = (bw * 0.38) / Math.max(HUECO, d);
+      dibujarNave(cx + along * k, cy - radial * k, 0, fase === 'insercion' || fase === 'aproximacion');
+      texto = 'SEPARACIÓN ' + formatoNum(d * p.r / 1000, 3) + ' km';
+    }
+    ctx.restore();
+    ctx.font = '600 10px "Chakra Petch", sans-serif'; ctx.fillStyle = 'rgba(220,235,255,0.6)'; ctx.textAlign = 'left';
+    ctx.fillText('CÁMARA DE PROXIMIDAD', bx + 8, by + 14);
+    ctx.font = '12px "Share Tech Mono", monospace'; ctx.fillStyle = '#3fe0ff';
+    ctx.fillText(texto, bx + 8, by + bh - 8);
+  }
+
+  function actualizarHud() {
+    const vNave = nave ? Math.hypot(nave.vx, nave.vy) * vReal : null;
+    const hNave = nave ? (Math.hypot(nave.x, nave.y) * p.r - p.R) / 1000 : null;
+    tel.innerHTML = `ALTITUD DE LA ESTACIÓN <b>${km(p.h)} km</b><br>` +
+      (nave ? `ALTITUD DE LA NAVE <b>${formatoNum(hNave, 4)} km</b><br>VELOCIDAD DE LA NAVE <b>${formatoNum(vNave, 4)} m/s</b>` : 'NAVE <b>en espera</b>');
+  }
+
+  let vivo = true, previo = performance.now(), t = 0;
+  function bucle(ahora) {
+    if (!vivo) return;
+    const dt = Math.min(0.05, (ahora - previo) / 1000);
+    previo = ahora; t += dt;
+    avanzar(dt);
+
+    ctx.clearRect(0, 0, W, H);
+    fondo.forEach(s => { ctx.globalAlpha = s.a; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(s.x * W, s.y * H, s.r, 0, Math.PI * 2); ctx.fill(); });
+    ctx.globalAlpha = 1;
+    const cx = W / 2 - Math.min(W, H) * 0.04, cy = H / 2 + 6;
+    const k = (Math.min(W, H) * 0.38);
+    dibujarTierra(cx, cy, Rn * k, t);
+    ctx.save(); ctx.setLineDash([5, 7]); ctx.strokeStyle = 'rgba(63,224,255,0.55)'; ctx.lineWidth = 1.3;
+    ctx.beginPath(); ctx.arc(cx, cy, k, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+    ctx.font = '600 11px "Chakra Petch", sans-serif'; ctx.fillStyle = 'rgba(63,224,255,0.8)'; ctx.textAlign = 'center';
+    ctx.fillText('ÓRBITA DE LA ESTACIÓN · ' + km(p.h) + ' km', cx, cy - k - 10);
+    if (estela.length > 1) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 1.5; ctx.beginPath();
+      estela.forEach((q, i) => { const X = cx + q[0] * k, Y = cy - q[1] * k; i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); });
+      ctx.stroke();
+    }
+    const e = posEstacion();
+    dibujarEstacion(cx + e[0] * k, cy - e[1] * k, -ang, 0.8);
+    if (!nave && fase === 'espera') {
+      // ventana de inserción: marca que acompaña a la estación por detrás
+      const a2 = ang - HUECO, mx = cx + Math.cos(a2) * k, my = cy - Math.sin(a2) * k;
+      ctx.save(); ctx.strokeStyle = 'rgba(255,185,46,' + (0.5 + 0.4 * Math.sin(t * 4)) + ')'; ctx.setLineDash([3, 3]);
+      ctx.beginPath(); ctx.arc(mx, my, 9, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+      ctx.font = '600 10px "Chakra Petch", sans-serif'; ctx.fillStyle = 'rgba(255,185,46,0.85)'; ctx.textAlign = 'right';
+      ctx.fillText('INSERCIÓN', mx - 12, my + 3);
+    }
+    if (nave) {
+      const nx = cx + nave.x * k, ny = cy - nave.y * k;
+      if (!detenido && (nx < -16 || nx > W + 16 || ny < -16 || ny > H + 16)) terminar('deriva');
+      dibujarNave(nx, ny, -Math.atan2(nave.vy, nave.vx), fase === 'insercion' || fase === 'aproximacion');
+    }
+    camaraProximidad();
+    actualizarHud();
+    requestAnimationFrame(bucle);
+  }
+  requestAnimationFrame(bucle);
+
+  return {
+    ejecutar(vAlumno, alTerminar) {
+      alFinal = alTerminar;
+      $('#mensaje').textContent = '';
+      if (!(vAlumno > 0)) { ponerFase('abortada'); return; }
+      f = vAlumno / vReal;
+      ok = Math.abs(f - 1) < 0.05;
+      const a2 = ang - HUECO;
+      nave = { x: Math.cos(a2), y: Math.sin(a2), vx: -Math.sin(a2) * f, vy: Math.cos(a2) * f };
+      sepInicial = separacion();
+      estela = [];
+      ponerFase('insercion');
+    },
+    destruir() { vivo = false; ro.disconnect(); lienzo.remove(); }
+  };
+}
+</script>

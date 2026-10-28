@@ -1,0 +1,616 @@
+<style>
+  /* =================================================================
+   * Misión «Caja negra»: telemetría de la caída y reconstrucción
+   * (reutiliza los paneles del observatorio de «Cazador de exoplanetas»)
+   * ================================================================= */
+  .caja-negra { position: absolute; inset: 14px; z-index: 1; display: grid; grid-template-rows: minmax(0, 1.1fr) minmax(0, 0.9fr); gap: 10px; }
+  .caja-abajo { min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 190px; gap: 10px; }
+  #lienzo-tele { cursor: crosshair; }
+  #lienzo-tele.arrastrando { cursor: grabbing; }
+  .obs-botones button.activo { background: var(--hud-cian); color: #04121a; border-color: var(--hud-cian); }
+  @media (max-width: 860px) {
+    .consola-vista.con-caja { min-height: 700px; }
+    .caja-abajo { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) auto; }
+  }
+</style>
+<script>
+/* =====================================================================
+ * Misión «Caja negra»: el alumno lee la velocidad de impacto en la telemetría
+ * y calcula, con la conservación de la energía (Ep = −GMm/r), la altura de caída.
+ * ===================================================================== */
+
+function pantallaCajaNegra(m) {
+  limpiarVista();
+  E.mision = m;
+  document.body.classList.add('vista-consola');
+  const s = m.escena;
+  const claveP = 'prediccion-' + m.id;
+  let prediccion = null;
+  try { prediccion = sessionStorage.getItem(claveP); } catch (e) { /* sin almacenamiento */ }
+
+  app.innerHTML = `
+    <section class="consola">
+      <header class="consola-cab">
+        <span class="consola-icono">${iconoMision(m)}</span>
+        <div>
+          <div class="consola-kicker">MSN-${m.id} · Investigación de accidentes · ${esc(s.nave)}</div>
+          <h1>${esc(m.titulo)}</h1>
+        </div>
+        <span class="dificultad">${dificultad(m.estrellas)}</span>
+        <span class="en-curso">🔒 Misión en curso · no se puede abandonar</span>
+      </header>
+      <div class="consola-cuerpo">
+        <div class="consola-vista con-caja" id="vista">
+          <div class="vista-hud vista-telemetria" id="telemetria" hidden></div>
+          <div class="vista-hud vista-fase" id="hud-fase" hidden><div class="fase" id="fase"></div><div class="hud-nombre">Reconstrucción · ${esc(s.nave)}</div></div>
+          <div class="vista-hud vista-mensaje" id="mensaje"></div>
+        </div>
+        <aside class="consola-lateral" id="lateral">
+          <div class="bloque-hud orden">
+            <div class="bloque-hud-tit">Orden de Control de Misión</div>
+            <p>${esc(m.historia)}</p>
+            <div class="datos-exo">
+              <div class="hud-dato">GRAVEDAD EN LA SUPERFICIE DE MARTE <b>${formatoNum(s.g0)} m/s²</b></div>
+              <div class="hud-dato">RADIO DE MARTE <b>${formatoNum(s.R)} m</b></div>
+            </div>
+          </div>
+          <div class="bloque-hud paso-hud">
+            <div class="bloque-hud-tit"><span>01</span> Predicción</div>
+            <p class="orden" style="margin:0 0 8px;font-size:14px;color:rgba(225,235,255,.85)">Si los motores hubieran fallado al doble de altura, la velocidad de impacto sería…</p>
+            <div class="predicciones">
+              <button type="button" class="prediccion" data-p="mayor">Más del doble</button>
+              <button type="button" class="prediccion" data-p="igual">El doble</button>
+              <button type="button" class="prediccion" data-p="menor">Menos del doble</button>
+            </div>
+            <p class="paso-nota">No puntúa: lo comprobarás al final.</p>
+          </div>
+          <div class="bloque-hud paso-hud" id="paso-maniobra">
+            <div class="bloque-hud-tit"><span>02</span> Altura del fallo</div>
+            <div class="maniobra-entrada">
+              <span class="simbolo">h =</span>
+              <input class="in-mantisa" id="m0" inputmode="decimal" placeholder="mantisa" aria-label="Mantisa">
+              <span class="por-diez">·10^</span>
+              <input class="in-exp" id="e0" inputmode="numeric" placeholder="exp" aria-label="Exponente">
+              <span class="unidad">km</span>
+            </div>
+            <div class="maniobra-previa" id="previa">Altura sobre la superficie a la que fallaron los motores.</div>
+            <button id="btn-ejecutar" class="btn-hud btn-mantener" type="button" aria-label="Mantén pulsado para enviar el informe">
+              <span class="relleno"></span>
+              <svg class="icono" viewBox="0 0 20 20" aria-hidden="true"><polygon points="10,1 19,10 10,19 1,10" fill="none" stroke="currentColor" stroke-width="2"/><polygon points="10,6 14,10 10,14 6,10" fill="currentColor"/></svg>
+              <span class="txt">Mantén para enviar</span>
+            </button>
+          </div>
+        </aside>
+      </div>
+    </section>`;
+
+  E.sim = crearCajaNegra($('#vista'), s);
+
+  // predicción
+  const pasoManiobra = $('#paso-maniobra');
+  const marcarPred = () => {
+    app.querySelectorAll('.prediccion').forEach(b => b.classList.toggle('activa', b.dataset.p === prediccion));
+    pasoManiobra.classList.toggle('bloqueado', !prediccion);
+  };
+  app.querySelectorAll('.prediccion').forEach(b => b.addEventListener('click', () => {
+    prediccion = b.dataset.p;
+    try { sessionStorage.setItem(claveP, prediccion); } catch (e) { /* sin almacenamiento */ }
+    marcarPred();
+  }));
+  marcarPred();
+
+  // vista previa del número
+  const previa = $('#previa');
+  const textoPrevia = 'Altura sobre la superficie a la que fallaron los motores.';
+  const actualizarPrevia = () => {
+    const v = leerNumeroCliente($('#m0').value, $('#e0').value);
+    if (!$('#m0').value.trim() && !$('#e0').value.trim()) { previa.textContent = textoPrevia; previa.classList.remove('error'); return null; }
+    if (v === null) { previa.textContent = 'Formato no válido'; previa.classList.add('error'); return null; }
+    previa.classList.remove('error');
+    previa.textContent = 'h = ' + formatoNum(v, 4) + ' km';
+    return v;
+  };
+  ['#m0', '#e0'].forEach(sel => $(sel).addEventListener('input', actualizarPrevia));
+
+  // enviar (mantener pulsado): entrega, reconstrucción e informe
+  const boton = $('#btn-ejecutar'), txt = boton.querySelector('.txt');
+  const mantener = botonMantener(boton, 900, async () => {
+    const valor = actualizarPrevia();
+    if (valor === null) {
+      aviso('Escribe la altura en notación científica antes de enviar el informe.');
+      mantener.reiniciar();
+      return;
+    }
+    txt.textContent = 'Transmitiendo…';
+    E.estrellasAntes = E.inicio.estrellas;
+    let res;
+    try {
+      res = await llamar('entregarMision', m.id, [{ m: $('#m0').value.trim(), e: $('#e0').value.trim() }], { prediccion: prediccion });
+    } catch (err) {
+      aviso(mensajeError(err));
+      txt.textContent = 'Mantén para enviar';
+      mantener.reiniciar();
+      return;
+    }
+    try { sessionStorage.removeItem(claveP); } catch (e) { /* sin almacenamiento */ }
+    E.inicio = res.inicio;
+    pintarBarra();
+    $('.en-curso').textContent = '⏳ Reconstruyendo la caída';
+    mostrarEjecucion(`Altura propuesta <b>${formatoNum(valor, 4)} km</b>`,
+      [['reconstruccion', 'Modelo de la caída'], ['caida', 'Caída simulada'], ['impacto', 'Comparación con la caja negra']], 'Reconstruyendo');
+    E.sim.destruir();
+    $('#vista').classList.remove('con-caja');
+    E.sim = crearSimCajaNegra($('#vista'), {
+      R: s.R, GM: res.extra.GM, H: res.sol * 1000, Hal: valor * 1000, vReg: s.vel[s.vel.length - 1], estrellas: res.estrellas, alFase: faseEjecucion
+    });
+    E.sim.ejecutar(resultadoSim => informeCajaNegra(m, res, valor, resultadoSim));
+  }, () => {
+    txt.textContent = 'Mantén pulsado…';
+    clearTimeout(boton._t);
+    boton._t = setTimeout(() => { txt.textContent = 'Mantén para enviar'; }, 1400);
+  });
+}
+
+function informeCajaNegra(m, res, valor, resultadoSim) {
+  const s = m.escena, x = res.extra;
+  $('.consola-cuerpo').classList.add('resultado');
+  const lateral = $('#lateral');
+  const estrellas = Array.from({ length: m.estrellas }, (_, i) =>
+    `<span style="animation-delay:${0.15 + i * 0.25}s" class="${i < res.estrellas ? '' : 'apagada'}">★</span>`).join('');
+  // velocidad de impacto si la caída hubiera empezado al doble de altura
+  const vDoble = Math.sqrt(2 * x.GM * (1 / s.R - 1 / (s.R + 2 * res.sol * 1000)));
+  const textosPred = { mayor: 'más del doble', igual: 'el doble', menor: 'menos del doble' };
+  const pred = res.prediccion
+    ? `<p class="informe-pred">Predijiste que, al doble de altura, la velocidad de impacto sería <b class="${res.prediccion === 'menor' ? 'ok' : 'mal'}">${textosPred[res.prediccion]}</b>.
+        ${res.prediccion === 'menor' ? '¡Correcto!' : 'En realidad sería menos del doble.'}
+        Desde ${formatoNum(2 * res.sol, 4)} km la nave impactaría a ${formatoNum(vDoble, 4)} m/s, solo ×${formatoNum(vDoble / x.v, 3)}:
+        la energía ganada crece menos que la altura (la gravedad se debilita al subir) y la velocidad va con la raíz de esa energía.</p>`
+    : '';
+  const titulo = res.estrellas === m.estrellas ? 'Accidente esclarecido' : res.estrellas > 0 ? 'Reconstrucción aproximada' : 'Reconstrucción fallida';
+
+  lateral.classList.remove('ejecutando');
+  lateral.classList.add('informe');
+  lateral.innerHTML = `
+    <div class="bloque-hud">
+      <div class="bloque-hud-tit">Informe de misión</div>
+      ${resultadoSim ? `<div class="informe-sim ${resultadoSim.ok ? 'ok' : 'mal'}">${esc(resultadoSim.texto)}</div>` : ''}
+      <div class="informe-estrellas">${estrellas}</div>
+      <div class="informe-resumen">${titulo} · ${res.estrellas} de ${m.estrellas} ★</div>
+    </div>
+    <div class="bloque-hud">
+      <div class="bloque-hud-tit">Altura del fallo</div>
+      <table class="informe-tabla">
+        <tr><td>Tu altura</td><td>${formatoNum(valor, 4)} km</td></tr>
+        <tr><td>Altura real</td><td>${formatoNum(res.sol, 4)} km</td></tr>
+        <tr><td>Error relativo</td><td>${res.error === null ? 'signo incorrecto' : res.error < 0.0001 ? '< 0,01 %' : formatoNum(res.error * 100, 3) + ' %'}</td></tr>
+      </table>
+      <div class="informe-escala">${textoEscala(m.estrellas)}</div>
+    </div>
+    ${res.pista ? `<div class="informe-pista"><b>Diagnóstico</b>${esc(res.pista)}</div>` : ''}
+    <div class="bloque-hud">
+      <div class="bloque-hud-tit">Datos de la caja negra</div>
+      <table class="informe-tabla">
+        <tr><td>Último registro</td><td>${formatoNum(s.vel[s.vel.length - 1], 4)} m/s</td></tr>
+        <tr><td>Duración de la caída</td><td>${formatoNum(x.tImpacto, 4)} s</td></tr>
+        <tr><td>Con mgh = ½mv² saldría</td><td>${formatoNum(x.conMgh, 4)} km</td></tr>
+      </table>
+    </div>
+    ${pred ? `<div class="bloque-hud"><div class="bloque-hud-tit">Tu predicción</div>${pred}</div>` : ''}
+    <div class="bloque-hud">
+      <div class="bloque-hud-tit">Resolución</div>
+      <ol class="pasos">${res.pasos.map(p => `<li>${p}</li>`).join('')}</ol>
+    </div>
+    <button id="btn-volver" class="btn-hud principal" type="button">Volver al registro de misiones</button>`;
+  renderMates(lateral);
+  lateral.scrollTop = 0;
+  $('.en-curso').textContent = '✓ Misión completada';
+  $('#btn-volver').addEventListener('click', pantallaPanel);
+  celebrar(E.estrellasAntes, res.inicio.estrellas, res.inicio.objetivo);
+}
+
+/* --------------------------- Caja negra --------------------------- */
+
+/**
+ * Telemetría de la velocidad (zoom, desplazamiento, cursor y una marca) y una vista de la caída
+ * sin escala, sincronizada con el cursor. «Reproducir» recorre toda la caída.
+ */
+function crearCajaNegra(cont, s) {
+  const vel = s.vel, n = vel.length, tFin = n - 1;
+  const raiz = document.createElement('div');
+  raiz.className = 'caja-negra';
+  raiz.innerHTML = `
+    <section class="obs-panel">
+      <header class="obs-cab">
+        <span class="obs-tit">Caja negra · velocidad (radar)</span>
+        <span class="obs-ayuda">Rueda: ampliar · Arrastrar: desplazar · Clic: marca</span>
+        <div class="obs-botones">
+          <button type="button" data-acc="menos" aria-label="Reducir">−</button>
+          <button type="button" data-acc="mas" aria-label="Ampliar">+</button>
+          <button type="button" data-acc="todo">Ver todo</button>
+          <button type="button" data-acc="borrar">Borrar marca</button>
+        </div>
+      </header>
+      <div class="lienzo-caja"><canvas id="lienzo-tele"></canvas></div>
+    </section>
+    <div class="caja-abajo">
+      <section class="obs-panel">
+        <header class="obs-cab">
+          <span class="obs-tit">Reconstrucción visual · sin escala</span>
+          <div class="obs-botones"><button type="button" data-acc="play">▶ Reproducir caída</button></div>
+        </header>
+        <div class="lienzo-caja"><canvas id="lienzo-caida"></canvas></div>
+      </section>
+      <section class="obs-panel obs-lecturas">
+        <div class="lectura"><span>Cursor · tiempo</span><b id="c-t">—</b></div>
+        <div class="lectura"><span>Cursor · velocidad</span><b id="c-v">—</b></div>
+        <div class="lectura marca"><span>Marca · tiempo</span><b id="m-t">—</b></div>
+        <div class="lectura marca grande"><span>Marca · velocidad</span><b id="m-v">—</b></div>
+      </section>
+    </div>`;
+  cont.insertBefore(raiz, cont.firstChild);
+
+  const lzT = raiz.querySelector('#lienzo-tele'), lzC = raiz.querySelector('#lienzo-caida');
+  const ctxT = lzT.getContext('2d'), ctxC = lzC.getContext('2d');
+  const ajustarLienzo = (lz, ctx) => {
+    const w = lz.clientWidth, h = lz.clientHeight, k = Math.min(window.devicePixelRatio || 1, 2);
+    if (lz.width !== Math.round(w * k) || lz.height !== Math.round(h * k)) { lz.width = Math.round(w * k); lz.height = Math.round(h * k); }
+    ctx.setTransform(k, 0, 0, k, 0, 0);
+    return [w, h];
+  };
+
+  // ----------------------------- telemetría -----------------------------
+  const vMax = Math.max(...vel) * 1.08;
+  let v0 = 0, v1 = tFin + Math.max(20, tFin * 0.04);   // ventana visible (s); algo de margen tras el final
+  const T_MAX = v1;
+  let cursor = null, marca = null, tAnim = 0;           // índices de registro (s)
+  const M = { izq: 58, der: 12, arr: 10, aba: 24 };
+  let geo = null;
+
+  function pintarTele() {
+    const [W, H] = ajustarLienzo(lzT, ctxT);
+    const x0 = M.izq, x1 = W - M.der, y0 = M.arr, y1 = H - M.aba;
+    geo = { x0, x1 };
+    const X = t => x0 + (t - v0) / (v1 - v0) * (x1 - x0);
+    const vMin = 0, vTop = vMax;
+    // al ampliar, el eje vertical se ajusta a los datos visibles para poder leerlos con precisión
+    let lo = vMin, hi = vTop;
+    if (v1 - v0 < tFin * 0.5) {
+      const a = Math.max(0, Math.floor(v0)), b = Math.min(tFin, Math.ceil(v1));
+      if (b > a) {
+        const vis = vel.slice(a, b + 1);
+        const mn = Math.min(...vis), mx = Math.max(...vis), m = Math.max(4, (mx - mn) * 0.15);
+        lo = mn - m; hi = mx + m;
+      }
+    }
+    const Y = v => y1 - (v - lo) / (hi - lo) * (y1 - y0);
+    ctxT.clearRect(0, 0, W, H);
+    ctxT.font = '10.5px "Share Tech Mono", monospace';
+    ctxT.strokeStyle = 'rgba(63,224,255,0.1)'; ctxT.fillStyle = 'rgba(220,235,255,0.5)'; ctxT.lineWidth = 1;
+    const ancho = v1 - v0;
+    const paso = [1, 2, 5, 10, 20, 50, 100, 200, 500].find(p => (x1 - x0) / (ancho / p) >= 64) || 500;
+    ctxT.textAlign = 'center';
+    for (let t = Math.ceil(v0 / paso) * paso; t <= v1 + 1e-9; t += paso) {
+      const x = X(t);
+      ctxT.beginPath(); ctxT.moveTo(x, y0); ctxT.lineTo(x, y1); ctxT.stroke();
+      if (x < x1 - 50) ctxT.fillText(String(Math.round(t)), x, y1 + 15);
+    }
+    ctxT.textAlign = 'right'; ctxT.fillText('t (s)', x1, y1 + 15);
+    const rango = hi - lo;
+    const pasoY = [0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000].find(p => rango / p <= 6) || 1000;
+    for (let v = Math.ceil(lo / pasoY) * pasoY; v <= hi; v += pasoY) {
+      const y = Y(v);
+      ctxT.beginPath(); ctxT.moveTo(x0, y); ctxT.lineTo(x1, y); ctxT.stroke();
+      ctxT.fillText(pasoY < 1 ? fijo(v, 1) : String(Math.round(v)), x0 - 6, y + 3.5);
+    }
+    ctxT.save(); ctxT.translate(12, (y0 + y1) / 2); ctxT.rotate(-Math.PI / 2); ctxT.textAlign = 'center';
+    ctxT.fillText('v (m/s)', 0, 0); ctxT.restore();
+
+    ctxT.save(); ctxT.beginPath(); ctxT.rect(x0, y0, x1 - x0, y1 - y0); ctxT.clip();
+    // fin de la señal
+    const xf = X(tFin);
+    ctxT.fillStyle = 'rgba(255,61,127,0.06)'; ctxT.fillRect(xf, y0, x1 - xf + 400, y1 - y0);
+    ctxT.strokeStyle = 'rgba(255,61,127,0.7)'; ctxT.setLineDash([4, 4]);
+    ctxT.beginPath(); ctxT.moveTo(xf, y0); ctxT.lineTo(xf, y1); ctxT.stroke(); ctxT.setLineDash([]);
+    ctxT.fillStyle = 'rgba(255,61,127,0.85)'; ctxT.font = '600 10.5px "Chakra Petch", sans-serif';
+    // si la zona sin señal es estrecha, la etiqueta va a la izquierda de la línea
+    const cabe = x1 - xf > 72;
+    ctxT.textAlign = cabe ? 'left' : 'right';
+    ctxT.fillText('SIN SEÑAL', cabe ? xf + 6 : xf - 6, y0 + 14);
+    // registros
+    const a = Math.max(0, Math.floor(v0) - 1), b = Math.min(tFin, Math.ceil(v1) + 1);
+    const pocos = (b - a) < (x1 - x0) / 4;
+    ctxT.strokeStyle = 'rgba(160,220,255,0.55)'; ctxT.lineWidth = 1.2; ctxT.beginPath();
+    for (let i = a; i <= b; i++) { const px = X(i), py = Y(vel[i]); i === a ? ctxT.moveTo(px, py) : ctxT.lineTo(px, py); }
+    ctxT.stroke();
+    if (pocos) {
+      ctxT.fillStyle = '#a0dcff';
+      for (let i = a; i <= b; i++) { ctxT.beginPath(); ctxT.arc(X(i), Y(vel[i]), 2.4, 0, Math.PI * 2); ctxT.fill(); }
+    }
+    // instante de la animación
+    const xa = X(tAnim);
+    ctxT.strokeStyle = 'rgba(63,224,255,0.5)'; ctxT.beginPath(); ctxT.moveTo(xa, y0); ctxT.lineTo(xa, y1); ctxT.stroke();
+    // cursor y marca
+    const punto = (i, color, etiqueta) => {
+      const px = X(i), py = Y(vel[i]);
+      ctxT.strokeStyle = color; ctxT.lineWidth = 1; ctxT.setLineDash([3, 3]);
+      ctxT.beginPath(); ctxT.moveTo(px, y0); ctxT.lineTo(px, y1); ctxT.moveTo(x0, py); ctxT.lineTo(x1, py); ctxT.stroke(); ctxT.setLineDash([]);
+      ctxT.fillStyle = color; ctxT.beginPath(); ctxT.arc(px, py, 4, 0, Math.PI * 2); ctxT.fill();
+      if (etiqueta) { ctxT.font = '700 11px "Chakra Petch", sans-serif'; ctxT.textAlign = 'left'; ctxT.fillText(etiqueta, px + 6, py - 6); }
+    };
+    if (cursor !== null) punto(cursor, 'rgba(220,235,255,0.75)');
+    if (marca !== null) punto(marca, '#ffb92e', 'M');
+    ctxT.restore();
+    ctxT.strokeStyle = 'rgba(200,230,255,0.3)'; ctxT.strokeRect(x0 + 0.5, y0 + 0.5, x1 - x0 - 1, y1 - y0 - 1);
+  }
+
+  const tDeX = x => v0 + (x - geo.x0) / (geo.x1 - geo.x0) * (v1 - v0);
+  const indice = x => Math.max(0, Math.min(tFin, Math.round(tDeX(x))));
+  const limitar = () => {
+    const ancho = Math.min(T_MAX, Math.max(8, v1 - v0));
+    if (v0 < 0) v0 = 0;
+    v1 = v0 + ancho;
+    if (v1 > T_MAX) { v1 = T_MAX; v0 = v1 - ancho; }
+  };
+  const ampliar = (factor, centro) => {
+    const c = centro === undefined ? (v0 + v1) / 2 : centro;
+    v0 = c - (c - v0) * factor; v1 = c + (v1 - c) * factor;
+    limitar(); pintarTele();
+  };
+  lzT.addEventListener('wheel', ev => {
+    ev.preventDefault();
+    const r = lzT.getBoundingClientRect();
+    ampliar(ev.deltaY > 0 ? 1.25 : 0.8, tDeX(ev.clientX - r.left));
+  }, { passive: false });
+  let arrastre = null;
+  lzT.addEventListener('pointerdown', ev => {
+    if (ev.button !== 0) return;
+    lzT.setPointerCapture(ev.pointerId);
+    arrastre = { x: ev.clientX, v0: v0, v1: v1, movido: false };
+  });
+  lzT.addEventListener('pointermove', ev => {
+    const r = lzT.getBoundingClientRect(), x = ev.clientX - r.left;
+    if (arrastre) {
+      const dx = ev.clientX - arrastre.x;
+      if (Math.abs(dx) > 4) { arrastre.movido = true; lzT.classList.add('arrastrando'); }
+      if (arrastre.movido) {
+        const dt = -dx / (geo.x1 - geo.x0) * (arrastre.v1 - arrastre.v0);
+        v0 = arrastre.v0 + dt; v1 = arrastre.v1 + dt; limitar();
+      }
+    }
+    // en la zona sin señal no hay lectura
+    if (x >= geo.x0 && x <= geo.x1 && tDeX(x) <= tFin + 0.5) { cursor = indice(x); if (!reproduciendo) tAnim = cursor; }
+    else cursor = null;
+    pintarTele(); pintarCaida(); lecturas();
+  });
+  lzT.addEventListener('pointerleave', () => { cursor = null; pintarTele(); lecturas(); });
+  lzT.addEventListener('pointerup', ev => {
+    if (!arrastre) return;
+    const clic = !arrastre.movido;
+    arrastre = null; lzT.classList.remove('arrastrando');
+    if (!clic) return;
+    const r = lzT.getBoundingClientRect(), x = ev.clientX - r.left;
+    if (x < geo.x0 || x > geo.x1 || tDeX(x) > tFin + 0.5) return;
+    marca = indice(x);
+    pintarTele(); lecturas();
+  });
+
+  // ------------------- reconstrucción visual (sin escala) -------------------
+  const fondo = Array.from({ length: 110 }, () => ({ x: Math.random(), y: Math.random(), r: Math.random() * 1 + 0.2, a: Math.random() * 0.5 + 0.2 }));
+  const fraccion = t => {
+    const k = t / 5, i = Math.floor(k), f = k - i, fr = s.frac;
+    if (i >= fr.length - 1) return 0;
+    return Math.max(0, fr[i] + (fr[i + 1] - fr[i]) * f);
+  };
+  function pintarCaida() {
+    const [W, H] = ajustarLienzo(lzC, ctxC);
+    ctxC.clearRect(0, 0, W, H);
+    fondo.forEach(st => { ctxC.globalAlpha = st.a; ctxC.fillStyle = '#fff'; ctxC.fillRect(st.x * W, st.y * H * 0.7, st.r, st.r); });
+    ctxC.globalAlpha = 1;
+    // superficie de Marte (arco) y atmósfera tenue
+    const suelo = H - 26, cx = W / 2, Rr = W * 1.6;
+    const g = ctxC.createLinearGradient(0, suelo - 10, 0, H);
+    g.addColorStop(0, '#c4673f'); g.addColorStop(1, '#5e2716');
+    ctxC.fillStyle = g; ctxC.beginPath(); ctxC.arc(cx, suelo + Rr, Rr, 0, Math.PI * 2); ctxC.fill();
+    ctxC.strokeStyle = 'rgba(255,170,120,0.35)'; ctxC.lineWidth = 3; ctxC.beginPath(); ctxC.arc(cx, suelo + Rr, Rr + 2, Math.PI * 1.2, Math.PI * 1.8); ctxC.stroke();
+    // nave: de arriba (fallo) al suelo (impacto)
+    const f = fraccion(tAnim), arriba = 22;
+    const y = suelo - 8 - f * (suelo - 8 - arriba);
+    ctxC.save(); ctxC.setLineDash([3, 5]); ctxC.strokeStyle = 'rgba(255,255,255,0.25)';
+    ctxC.beginPath(); ctxC.moveTo(cx, arriba); ctxC.lineTo(cx, y); ctxC.stroke(); ctxC.restore();
+    ctxC.font = '600 10px "Chakra Petch", sans-serif'; ctxC.fillStyle = 'rgba(255,185,46,0.8)'; ctxC.textAlign = 'left';
+    ctxC.fillText('FALLO DE MOTORES · h = ?', cx + 10, arriba + 4);
+    ctxC.fillStyle = 'rgba(255,185,46,0.8)'; ctxC.beginPath(); ctxC.arc(cx, arriba, 3, 0, Math.PI * 2); ctxC.fill();
+    if (tAnim >= tFin) {
+      const r = 10 + 6 * Math.random();
+      const fl = ctxC.createRadialGradient(cx, suelo - 4, 0, cx, suelo - 4, r * 2);
+      fl.addColorStop(0, 'rgba(255,240,200,0.95)'); fl.addColorStop(0.4, 'rgba(255,140,60,0.7)'); fl.addColorStop(1, 'rgba(255,80,30,0)');
+      ctxC.fillStyle = fl; ctxC.beginPath(); ctxC.arc(cx, suelo - 4, r * 2, 0, Math.PI * 2); ctxC.fill();
+    } else {
+      ctxC.save(); ctxC.translate(cx, y);
+      ctxC.fillStyle = '#e8edf5';
+      ctxC.beginPath(); ctxC.moveTo(0, 8); ctxC.lineTo(4.5, 0); ctxC.lineTo(4.5, -7); ctxC.lineTo(-4.5, -7); ctxC.lineTo(-4.5, 0); ctxC.closePath(); ctxC.fill();
+      ctxC.fillStyle = '#3fe0ff'; ctxC.fillRect(-1.5, -4, 3, 3);
+      ctxC.restore();
+    }
+    ctxC.font = '12px "Share Tech Mono", monospace'; ctxC.fillStyle = 'rgba(220,235,255,0.7)'; ctxC.textAlign = 'right';
+    ctxC.fillText('t = ' + Math.round(tAnim) + ' s', W - 10, 18);
+  }
+
+  // reproducir toda la caída en ~10 s
+  let reproduciendo = false, raf = null;
+  const botonPlay = raiz.querySelector('[data-acc="play"]');
+  function reproducir() {
+    if (reproduciendo) { reproduciendo = false; cancelAnimationFrame(raf); botonPlay.textContent = '▶ Reproducir caída'; botonPlay.classList.remove('activo'); return; }
+    reproduciendo = true; botonPlay.textContent = '❚❚ Pausa'; botonPlay.classList.add('activo');
+    if (tAnim >= tFin) tAnim = 0;
+    let previo = performance.now();
+    const paso = ahora => {
+      if (!reproduciendo || !raiz.isConnected) return;
+      tAnim = Math.min(tFin, tAnim + (ahora - previo) / 1000 * tFin / 10);
+      previo = ahora;
+      pintarCaida(); pintarTele();
+      if (tAnim >= tFin) { reproducir(); return; }
+      raf = requestAnimationFrame(paso);
+    };
+    raf = requestAnimationFrame(paso);
+  }
+
+  raiz.querySelectorAll('.obs-botones button').forEach(b => b.addEventListener('click', () => {
+    const a = b.dataset.acc;
+    if (a === 'mas') ampliar(0.6);
+    else if (a === 'menos') ampliar(1 / 0.6);
+    else if (a === 'todo') { v0 = 0; v1 = T_MAX; pintarTele(); }
+    else if (a === 'borrar') { marca = null; pintarTele(); lecturas(); }
+    else if (a === 'play') reproducir();
+  }));
+
+  function lecturas() {
+    const q = id => raiz.querySelector(id);
+    q('#c-t').textContent = cursor === null ? '—' : cursor + ' s';
+    q('#c-v').textContent = cursor === null ? '—' : fijo(vel[cursor], 1) + ' m/s';
+    q('#m-t').textContent = marca === null ? '—' : marca + ' s';
+    q('#m-v').textContent = marca === null ? '—' : fijo(vel[marca], 1) + ' m/s';
+  }
+
+  const ro = new ResizeObserver(() => { pintarTele(); pintarCaida(); });
+  ro.observe(lzT); ro.observe(lzC);
+  pintarTele(); pintarCaida(); lecturas();
+
+  return { destruir() { reproduciendo = false; cancelAnimationFrame(raf); ro.disconnect(); raiz.remove(); } };
+}
+
+/* --------------------------- Simulador ---------------------------- */
+
+/**
+ * Reconstrucción con escala: la nave real cae desde la altura verdadera y una «fantasma»
+ * desde la altura del alumno. Al llegar al suelo se comparan las velocidades de impacto.
+ */
+function crearSimCajaNegra(cont, p) {
+  const lienzo = document.createElement('canvas');
+  cont.insertBefore(lienzo, cont.firstChild);
+  const ctx = lienzo.getContext('2d');
+  let W = 0, H = 0;
+  const fondo = Array.from({ length: 150 }, () => ({ x: Math.random(), y: Math.random(), r: Math.random() * 1.1 + 0.2, a: Math.random() * 0.6 + 0.2 }));
+  const ajustar = () => {
+    const k = Math.min(window.devicePixelRatio || 1, 2);
+    W = cont.clientWidth; H = cont.clientHeight;
+    lienzo.width = W * k; lienzo.height = H * k;
+    ctx.setTransform(k, 0, 0, k, 0, 0);
+  };
+  const ro = new ResizeObserver(ajustar);
+  ro.observe(cont);
+  ajustar();
+
+  const tel = $('#telemetria'), elFase = $('#fase');
+  tel.hidden = false; $('#hud-fase').hidden = false;
+  const valida = p.Hal > 0;
+  const km = n => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  // tiempo de caída desde el reposo (solución exacta de la caída radial)
+  const tCaida = h => { const r0 = p.R + h, x = p.R / r0; return Math.sqrt(r0 * r0 * r0 / (2 * p.GM)) * (Math.sqrt(x * (1 - x)) + Math.acos(Math.sqrt(x))); };
+  const vImpacto = h => Math.sqrt(2 * p.GM * (1 / p.R - 1 / (p.R + h)));
+  const naves = [{ h0: p.H, r: p.R + p.H, u: 0, color: '#3fe0ff', nombre: 'CAJA NEGRA', fin: null }];
+  if (valida) naves.push({ h0: p.Hal, r: p.R + p.Hal, u: 0, color: '#ffb92e', nombre: 'TU ALTURA', fin: null });
+  const tReal = tCaida(p.H);
+  const tLim = valida ? Math.min(Math.max(tReal, tCaida(p.Hal)), 3 * tReal) : tReal;
+  const ritmo = tLim / 8;                                       // segundos simulados por segundo real
+  const escalaMax = Math.min(Math.max(p.H, valida ? p.Hal : 0) * 1.12, p.H * 3);
+  let fase = 'espera', tFase = 0, tSim = 0, detenido = false, alFinal = null;
+  const nombres = { reconstruccion: 'Modelo de la caída', caida: 'Caída simulada', impacto: 'Comparación con la caja negra', abortada: 'Altura no válida' };
+  const ponerFase = nf => { fase = nf; tFase = 0; elFase.textContent = nombres[nf]; if (p.alFase) p.alFase(nf, nombres[nf]); };
+  elFase.textContent = 'En espera';
+
+  function terminar() {
+    if (detenido) return;
+    detenido = true;
+    let texto, ok = false;
+    if (!valida) texto = 'Altura no válida: debe ser positiva';
+    else {
+      const va = vImpacto(p.Hal);
+      ok = p.estrellas > 0;
+      texto = (ok ? 'La reconstrucción coincide: ' : 'No coincide con la caja negra: ') +
+        'desde tu altura impactaría a ' + km(va) + ' m/s (registro: ' + km(p.vReg) + ' m/s)';
+    }
+    const msg = $('#mensaje');
+    msg.textContent = texto;
+    msg.className = 'vista-hud vista-mensaje ' + (ok ? 'ok' : 'mal');
+    if (alFinal) { const cb = alFinal; alFinal = null; setTimeout(() => cb({ texto: texto, ok: ok }), 900); }
+  }
+
+  function avanzar(dt) {
+    if (detenido || fase === 'espera') return;
+    tFase += dt;
+    if (fase === 'abortada') { if (tFase > 1.2) terminar(); return; }
+    if (fase === 'reconstruccion') { if (tFase > 0.9) ponerFase('caida'); return; }
+    if (fase === 'caida') {
+      const total = dt * ritmo, sub = Math.max(1, Math.ceil(total / 2));
+      for (let k = 0; k < sub; k++) {
+        naves.forEach(nv => {
+          if (nv.fin !== null) return;
+          const h = total / sub;
+          nv.u += p.GM / (nv.r * nv.r) * h / 2; nv.r -= nv.u * h; nv.u += p.GM / (nv.r * nv.r) * h / 2;
+          if (nv.r <= p.R) { nv.r = p.R; nv.fin = { t: tSim + h, v: vImpacto(nv.h0) }; }
+        });
+        tSim += total / sub;
+      }
+      if (naves.every(nv => nv.fin !== null) || tSim >= tLim) ponerFase('impacto');
+      return;
+    }
+    if (fase === 'impacto' && tFase > 1.1) terminar();
+  }
+
+  let vivo = true, previo = performance.now();
+  function bucle(ahora) {
+    if (!vivo) return;
+    const dt = Math.min(0.05, (ahora - previo) / 1000);
+    previo = ahora;
+    avanzar(dt);
+    ctx.clearRect(0, 0, W, H);
+    fondo.forEach(st => { ctx.globalAlpha = st.a; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(st.x * W, st.y * H, st.r, 0, Math.PI * 2); ctx.fill(); });
+    ctx.globalAlpha = 1;
+    // escala vertical: altura sobre la superficie
+    const suelo = H - 100, techo = 70, X0 = 70;          // deja sitio bajo el suelo al mensaje final
+    const Y = h => suelo - h / escalaMax * (suelo - techo);
+    ctx.fillStyle = '#7a3420'; ctx.fillRect(0, suelo, W, H - suelo);
+    ctx.fillStyle = '#c4673f'; ctx.fillRect(0, suelo, W, 3);
+    ctx.strokeStyle = 'rgba(200,230,255,0.35)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(X0, techo - 10); ctx.lineTo(X0, suelo); ctx.stroke();
+    ctx.font = '10.5px "Share Tech Mono", monospace'; ctx.fillStyle = 'rgba(220,235,255,0.55)'; ctx.textAlign = 'right';
+    const pasoKm = [100, 200, 250, 500, 1000, 2000].find(q => escalaMax / 1000 / q <= 7) || 2000;
+    for (let hk = 0; hk * 1000 <= escalaMax; hk += pasoKm) {
+      const y = Y(hk * 1000);
+      ctx.beginPath(); ctx.moveTo(X0 - 4, y); ctx.lineTo(X0, y); ctx.stroke();
+      ctx.fillText(km(hk) + ' km', X0 - 7, y + 3.5);
+    }
+    // naves
+    naves.forEach((nv, i) => {
+      const x = W * (valida ? (i ? 0.66 : 0.42) : 0.5);
+      const h = nv.r - p.R, y = Y(Math.min(h, escalaMax));
+      const yIni = Y(Math.min(nv.h0, escalaMax));
+      ctx.save(); ctx.setLineDash([3, 5]); ctx.strokeStyle = nv.color; ctx.globalAlpha = 0.4;
+      ctx.beginPath(); ctx.moveTo(x, yIni); ctx.lineTo(x, y); ctx.stroke(); ctx.restore();
+      ctx.fillStyle = nv.color; ctx.font = '600 10.5px "Chakra Petch", sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText(nv.nombre + (nv.h0 > escalaMax ? ' ↑ ' + km(nv.h0 / 1000) + ' km' : ''), x, yIni - 10);
+      if (nv.fin) {
+        ctx.fillText(km(nv.fin.v) + ' m/s · ' + km(nv.fin.t) + ' s', x, suelo + 22);
+        ctx.globalAlpha = 0.7; ctx.beginPath(); ctx.arc(x, suelo, 9, Math.PI, 0); ctx.fill(); ctx.globalAlpha = 1;
+      } else if (h <= escalaMax) {
+        ctx.beginPath(); ctx.moveTo(x, y + 8); ctx.lineTo(x + 4.5, y); ctx.lineTo(x + 4.5, y - 7); ctx.lineTo(x - 4.5, y - 7); ctx.lineTo(x - 4.5, y); ctx.closePath(); ctx.fill();
+      }
+    });
+    const vReal = naves[0].u;
+    tel.innerHTML = `TIEMPO <b>${km(tSim)} s</b><br>VELOCIDAD (CAJA NEGRA) <b>${km(vReal)} m/s</b>` +
+      (valida ? `<br>VELOCIDAD (TU ALTURA) <b>${km(naves[1].u)} m/s</b>` : '');
+    requestAnimationFrame(bucle);
+  }
+  requestAnimationFrame(bucle);
+
+  return {
+    ejecutar(alTerminar) {
+      alFinal = alTerminar;
+      $('#mensaje').textContent = '';
+      ponerFase(valida ? 'reconstruccion' : 'abortada');
+    },
+    destruir() { vivo = false; ro.disconnect(); lienzo.remove(); }
+  };
+}
+</script>

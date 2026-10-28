@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Misiones orbitales · Guía para el profesorado</title>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+  @page { size: A4; margin: 15mm 16mm 16mm; }
+  @page :first { margin: 0; }
+  :root { --tinta: #1b2233; --suave: #5a6478; --linea: #d8dde8; --ambar: #c98a0c; --ambar-claro: #fff4dc; --cian: #0e8fb3; --cian-claro: #e3f5fb;
+    --rojo: #c4214f; --rojo-claro: #fde8ee; --verde: #1f8a55; --verde-claro: #e3f6ec; --marino: #070c1d; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { font: 10pt/1.55 'Inter', sans-serif; color: var(--tinta); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  h1, h2, h3, .kicker, .portada-titulo { font-family: 'Chakra Petch', sans-serif; text-transform: uppercase; letter-spacing: 0.08em; }
+  h1 { break-before: page; margin: 0 0 5mm; padding-bottom: 3mm; font-size: 20pt; border-bottom: 2.5px solid var(--ambar); }
+  h1 .num { color: var(--ambar); margin-right: 8px; }
+  h2 { margin: 7mm 0 2.5mm; font-size: 13pt; color: var(--marino); break-after: avoid; }
+  h2 .num { color: var(--cian); margin-right: 6px; font-family: 'Share Tech Mono', monospace; }
+  h3 { margin: 5mm 0 2mm; font-size: 10.5pt; letter-spacing: 0.1em; color: var(--suave); break-after: avoid; }
+  p { margin: 0 0 2.5mm; }
+  a { color: var(--cian); word-break: break-all; }
+  b, strong { font-weight: 600; }
+  code, .mono { font-family: 'Share Tech Mono', monospace; font-size: 9.5pt; background: #f1f3f8; padding: 0 4px; border-radius: 3px; }
+  ul, ol { margin: 0 0 3mm; padding-left: 6mm; }
+  li { margin-bottom: 1.2mm; }
+  figure { margin: 3mm 0 4mm; break-inside: avoid; }
+  figure img { display: block; width: 100%; border: 1px solid var(--linea); border-radius: 4px; }
+  figcaption { margin-top: 1.5mm; font-size: 8.5pt; color: var(--suave); text-align: center; }
+  .dos { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; }
+  .dos figure { margin: 2mm 0; }
+  .dos img { aspect-ratio: 16 / 9.6; object-fit: cover; object-position: top center; }
+  .estrecha { width: 78%; margin-left: auto; margin-right: auto; }
+
+  /* pasos numerados */
+  ol.pasos { list-style: none; padding: 0; counter-reset: paso; }
+  ol.pasos > li { position: relative; padding-left: 10mm; margin-bottom: 2.5mm; counter-increment: paso; break-inside: avoid; }
+  ol.pasos > li::before { content: counter(paso); position: absolute; left: 0; top: 0; width: 6.5mm; height: 6.5mm; border-radius: 50%;
+    background: var(--marino); color: #fff; font: 600 9pt/6.5mm 'Chakra Petch', sans-serif; text-align: center; }
+
+  /* cajas */
+  .caja { margin: 3mm 0 4mm; padding: 3mm 4mm; border-left: 3px solid var(--cian); background: var(--cian-claro); border-radius: 0 4px 4px 0; break-inside: avoid; }
+  .caja.aviso { border-color: var(--ambar); background: var(--ambar-claro); }
+  .caja.peligro { border-color: var(--rojo); background: var(--rojo-claro); }
+  .caja.ok { border-color: var(--verde); background: var(--verde-claro); }
+  .caja > :last-child { margin-bottom: 0; }
+  .caja .t { display: block; margin-bottom: 1mm; font: 600 8.5pt 'Chakra Petch', sans-serif; letter-spacing: 0.14em; text-transform: uppercase; }
+
+  /* tablas */
+  table { width: 100%; border-collapse: collapse; margin: 2mm 0 4mm; font-size: 9.5pt; break-inside: avoid; }
+  th { text-align: left; padding: 2mm 3mm; background: var(--marino); color: #fff; font: 600 8.5pt 'Chakra Petch', sans-serif; letter-spacing: 0.1em; text-transform: uppercase; }
+  td { padding: 2mm 3mm; border-bottom: 1px solid var(--linea); vertical-align: top; }
+  tr:nth-child(even) td { background: #f7f8fb; }
+
+  /* hueco de captura pendiente (pantallas de Google) */
+  .pendiente { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2mm; aspect-ratio: 16 / 7; margin: 3mm 0 4mm;
+    border: 2px dashed var(--ambar); border-radius: 6px; background: repeating-linear-gradient(135deg, #fffaf0 0 10px, #fff4dc 10px 20px); color: var(--ambar);
+    font: 600 10pt 'Chakra Petch', sans-serif; letter-spacing: 0.08em; text-transform: uppercase; text-align: center; break-inside: avoid; }
+  .pendiente small { font: 400 9pt 'Inter', sans-serif; text-transform: none; letter-spacing: 0; color: var(--suave); }
+
+  /* estados de la campaña */
+  .estado { display: grid; grid-template-columns: 34mm 1fr; gap: 4mm; margin: 4mm 0; padding-top: 4mm; border-top: 1px solid var(--linea); }
+  .estado:first-of-type { border-top: 0; }
+  .estado .etq { font: 700 10pt 'Chakra Petch', sans-serif; letter-spacing: 0.12em; text-transform: uppercase; color: var(--marino); }
+  .estado .etq small { display: block; margin-top: 1mm; font: 500 8.5pt 'Inter', sans-serif; letter-spacing: 0; text-transform: none; color: var(--suave); }
+  .boton { display: inline-block; padding: 0.3mm 2mm; border: 1.5px solid var(--ambar); color: var(--ambar); font: 600 8pt 'Chakra Petch', sans-serif; letter-spacing: 0.1em;
+    text-transform: uppercase; border-radius: 2px; white-space: nowrap; }
+  .boton.rojo { border-color: var(--rojo); color: var(--rojo); }
+
+  /* portada */
+  .portada { height: 297mm; padding: 26mm 20mm 18mm; background: radial-gradient(ellipse at 30% 20%, #16244f 0%, #070c1d 60%); color: #f4f7ff;
+    display: flex; flex-direction: column; break-after: page; }
+  .portada svg { width: 24mm; height: 24mm; }
+  .portada .hex-ext { fill: none; stroke: #3fe0ff; stroke-width: 4; }
+  .portada .hex-nucleo { fill: #ffb92e; }
+  .portada-titulo { margin-top: 10mm; font-size: 38pt; font-weight: 700; letter-spacing: 0.16em; line-height: 1.05; }
+  .portada-sub { margin-top: 4mm; font: 600 13pt 'Chakra Petch', sans-serif; letter-spacing: 0.22em; text-transform: uppercase; color: #ffb92e; }
+  .portada-meta { margin-top: 2mm; font-size: 11pt; color: rgba(220, 235, 255, 0.75); }
+  .portada img { margin-top: auto; width: 100%; border-radius: 6px; border: 1px solid rgba(200, 230, 255, 0.25); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5); }
+  .portada-pie { margin-top: 8mm; font-size: 9pt; color: rgba(220, 235, 255, 0.55); letter-spacing: 0.06em; }
+
+  /* índice */
+  .indice { list-style: none; padding: 0; margin: 4mm 0 8mm; }
+  .indice li { display: flex; gap: 4mm; padding: 2.5mm 0; border-bottom: 1px solid var(--linea); font: 600 11pt 'Chakra Petch', sans-serif; letter-spacing: 0.06em; text-transform: uppercase; }
+  .indice li span { color: var(--ambar); width: 8mm; }
+  .indice li small { margin-left: auto; font: 400 9pt 'Inter', sans-serif; text-transform: none; letter-spacing: 0; color: var(--suave); }
+  .intro h1 { break-before: auto; }
+
+  /* preguntas frecuentes */
+  .faq { margin: 0 0 3.5mm; break-inside: avoid; }
+  .faq .q { display: block; color: var(--marino); }
+</style>
+</head>
+<body>
+
+<!-- ============================== PORTADA ============================== -->
+<section class="portada">
+  <svg viewBox="0 0 120 120" aria-hidden="true"><polygon class="hex-ext" points="60,8 105,34 105,86 60,112 15,86 15,34"/><polygon class="hex-nucleo" points="60,42 78,60 60,78 42,60"/></svg>
+  <div class="portada-titulo">Misiones<br>orbitales</div>
+  <div class="portada-sub">Guía de instalación y uso para el profesorado</div>
+  <div class="portada-meta">Física · 2.º Bachillerato · Campo gravitatorio</div>
+  <img src="img/puente-curso.jpg" alt="Puente de mando con la tripulación">
+  <div class="portada-pie">Aplicación web gamificada sobre Google Apps Script · Cuentas del centro (Google Workspace)</div>
+</section>
+
+<!-- ============================== INTRO ============================== -->
+<section class="intro">
+  <h1>Contenido</h1>
+  <ul class="indice">
+    <li><span>1</span>Qué es Misiones orbitales<small>La actividad en un vistazo</small></li>
+    <li><span>2</span>Instalación<small>Una sola vez · unos 10 minutos</small></li>
+    <li><span>3</span>Los tres enlaces<small>Configuración, alumnado y puente</small></li>
+    <li><span>4</span>El día de clase<small>La campaña paso a paso</small></li>
+    <li><span>5</span>Gestión desde la configuración<small>Alumnos, estado, apuntes y nuevas campañas</small></li>
+    <li><span>6</span>Problemas frecuentes<small>Y cómo resolverlos</small></li>
+  </ul>
+  <div class="caja aviso"><span class="t">Antes de empezar</span>
+    <p>Para instalarla necesitas tu cuenta del centro (<b>@g.educaand.es</b>) y que el alumnado use también su cuenta del centro: la app identifica a cada alumno por su correo, y eso solo funciona dentro del mismo dominio.</p>
+  </div>
+</section>
+
+<!-- ============================== 1. QUÉ ES ============================== -->
+<h1><span class="num">1</span>Qué es Misiones orbitales</h1>
+<p>Es una actividad gamificada e individual de <b>campo gravitatorio</b> para una sesión de clase. Cada alumno crea un astronauta y completa misiones en las que tiene que obtener datos de simuladores interactivos y calcular un resultado.</p>
+<ul>
+  <li><b>9 misiones</b>: 3 de ★, 3 de ★★ y 3 de ★★★ (18 estrellas en juego). Cada alumno elige cuáles hace.</li>
+  <li><b>Objetivo: 7 ★</b>, lo que obliga a hacer al menos tres misiones, alguna de ellas difícil.</li>
+  <li><b>Un solo intento</b> por misión, y una misión empezada no se puede abandonar.</li>
+  <li><b>Estrellas según la precisión</b> del resultado: error menor del 5 % → todas las estrellas de la misión; menor del 10 % → una menos; menor del 25 % → dos menos; más, signo mal o en blanco → 0 ★.</li>
+  <li><b>Sin copias posibles</b>: los datos de cada misión se generan a partir de la cuenta de cada alumno, así que dos compañeros nunca tienen los mismos números.</li>
+  <li>Antes de calcular, una <b>predicción</b> que no puntúa. Al entregar, la resolución completa y un <b>diagnóstico</b> si el error coincide con uno típico (olvidar el radio, usar <i>mgh</i>, unidades…).</li>
+  <li><b>Rangos</b> según las estrellas (de Cadete a Leyenda estelar) y un <b>puente de mando</b> para proyectar en clase, con la clasificación y una ceremonia final.</li>
+</ul>
+<div class="dos">
+  <figure><img src="img/alumno-panel.jpg" alt=""><figcaption>Panel de misiones: lista y ficha de la misión elegida.</figcaption></figure>
+  <figure><img src="img/alumno-mision.jpg" alt=""><figcaption>Misión en curso: simulador, predicción y respuesta.</figcaption></figure>
+</div>
+
+<!-- ============================== 2. INSTALACIÓN ============================== -->
+<h1><span class="num">2</span>Instalación</h1>
+<p>Se hace <b>una sola vez</b>. Al terminar tendrás tu propia copia de la app, con tu propia hoja de resultados; nadie más ve los datos de tu alumnado.</p>
+
+<h2><span class="num">2.1</span>Haz tu copia del script</h2>
+<ol class="pasos">
+  <li>Abre este enlace con tu cuenta del centro:<br><a href="https://script.google.com/d/19OP5j4VCpzXoo_UxLN8h634Pco3cxgXbLy1GqnWsqjhUsm5QRjtM5oc1/edit?usp=sharing">script.google.com/d/19OP5j4VCpzXoo_UxLN8h634Pco3cxgXbLy1GqnWsqjhUsm5QRjtM5oc1/edit</a></li>
+  <li>En la barra de la izquierda, pulsa el icono <b>ⓘ</b> (<b>Datos del proyecto</b>).</li>
+  <li>Arriba a la derecha, pulsa el icono de las dos hojas: <b>Hacer una copia</b>. Se abrirá tu copia, llamada «Copia de Misiones orbitales» (o «Copy of Misiones orbitales»).</li>
+  <li>Cámbiale el nombre si quieres (pulsando sobre el título) y, desde Google Drive, muévela a la carpeta donde quieras tener la actividad: <b>la hoja de resultados se creará en esa misma carpeta</b>.</li>
+</ol>
+<figure><img src="img/google-copia.jpg" alt=""><figcaption>Datos del proyecto: el botón «Hacer una copia» está arriba a la derecha.</figcaption></figure>
+<div class="caja"><span class="t">Tu copia empieza de cero</span><p>La copia se lleva el código, pero no la hoja de resultados ni los apuntes del autor: los configurarás tú en los pasos siguientes.</p></div>
+
+<h2><span class="num">2.2</span>Implementa la aplicación web</h2>
+<ol class="pasos">
+  <li>En tu copia, pulsa el botón azul <b>Implementar › Nueva implementación</b>.</li>
+  <li>Junto a «Seleccionar tipo», pulsa el engranaje ⚙ y elige <b>Aplicación web</b>.</li>
+  <li>Rellena los campos así:
+    <table>
+      <tr><th style="width:38%">Campo</th><th>Valor</th></tr>
+      <tr><td>Descripción</td><td>La que quieras, por ejemplo <code>Misiones orbitales</code></td></tr>
+      <tr><td>Ejecutar como</td><td><b>Yo</b> (tu correo). Así los alumnos guardan sus resultados en tu hoja sin tener acceso a ella.</td></tr>
+      <tr><td>Quién tiene acceso</td><td><b>Cualquier usuario de Consejería de Educación</b> (las cuentas del centro). No elijas «Cualquier usuario»: la app necesita saber quién es cada alumno.</td></tr>
+    </table>
+  </li>
+  <li>Pulsa <b>Implementar</b>. Google te pedirá permisos: pulsa <b>Autorizar acceso</b>, elige tu cuenta y, en la lista de permisos, marca <b>Seleccionar todo</b> («Select all» si la pantalla sale en inglés) antes de continuar.</li>
+  <li>Al terminar verás la <b>URL de la aplicación web</b> (acaba en <code>/exec</code>). Pulsa <b>Copiar</b> y guárdala: es tu enlace de configuración.</li>
+</ol>
+<figure><img src="img/google-implementar.jpg" alt=""><figcaption>Diálogo «Nueva implementación» rellenado.</figcaption></figure>
+<figure class="estrecha" style="width:52%"><img src="img/google-permisos.jpg" alt=""><figcaption>Pantalla de permisos (puede salir en inglés). Marca «Seleccionar todo»: la casilla de Google Drive es imprescindible.</figcaption></figure>
+<div class="caja aviso"><span class="t">Si aparece «Google no ha verificado esta aplicación»</span><p>Es normal: la app es tu propia copia. Pulsa <b>Configuración avanzada</b> y después <b>Ir a Misiones orbitales (no seguro)</b>.</p></div>
+
+<h2><span class="num">2.3</span>Autoriza el permiso de Google Drive</h2>
+<p>La app guarda la hoja de resultados en la misma carpeta que el script. Para eso necesita un permiso de Drive que la pantalla de implementar a veces no pide del todo, así que hay que concederlo a mano <b>una vez</b>:</p>
+<ol class="pasos">
+  <li>En el editor de tu copia, abre el archivo <b>Codigo.gs</b> en la lista de archivos.</li>
+  <li>En la barra de herramientas superior, en el desplegable de funciones, elige <b>autorizar</b> y pulsa <b>▷ Ejecutar</b>.</li>
+  <li>Si aparece la pantalla de permisos (la misma del paso 2.2), <b>marca la casilla de Google Drive</b> (o «Seleccionar todo») y continúa.</li>
+  <li>En el «Registro de ejecución» de abajo debe aparecer: <i>«Permisos concedidos. Las hojas de resultados se crearán en la carpeta…»</i></li>
+</ol>
+<div class="caja"><span class="t">¿Y si me lo salto?</span><p>La app funciona igual, pero la hoja de resultados se creará en «Mi unidad» en lugar de en tu carpeta. La configuración te avisará de que falta el permiso.</p></div>
+
+<h2><span class="num">2.4</span>Primera puesta en marcha</h2>
+<ol class="pasos">
+  <li>Abre la URL que copiaste en el paso 2.2 (la que acaba en <code>/exec</code>). Como eres el dueño, entrarás en la <b>Configuración</b>.</li>
+  <li>Escribe el nombre de la hoja (se propone el curso actual) y pulsa <b>Crear hoja de resultados</b>. Tarda unos segundos.</li>
+</ol>
+<figure class="estrecha"><img src="img/config-instalar.png" alt=""><figcaption>Primera puesta en marcha: creación de la hoja de resultados.</figcaption></figure>
+
+<h2><span class="num">2.5</span>Apuntes en PDF (opcional)</h2>
+<p>Si quieres que el alumnado pueda consultar tus apuntes durante la actividad, sube el PDF a tu Drive, copia su enlace (botón derecho › Compartir › Copiar enlace) y pégalo en la caja <b>Apuntes</b> de la configuración. Aparecerá un botón <b>Apuntes</b> en la barra de los alumnos, que abre el PDF en una ventana que pueden mover y redimensionar.</p>
+<div class="caja ok"><span class="t">No hace falta compartir el PDF</span><p>La app se lo envía a los alumnos aunque el archivo sea privado.</p></div>
+<figure><img src="img/alumno-apuntes.jpg" alt=""><figcaption>Ventana de apuntes abierta sobre el panel de misiones (con un PDF de ejemplo).</figcaption></figure>
+
+<!-- ============================== 3. ENLACES ============================== -->
+<h1><span class="num">3</span>Los tres enlaces</h1>
+<p>Toda la app funciona con la URL de tu implementación. Lo que cambia es el final:</p>
+<table>
+  <tr><th style="width:30%">Enlace</th><th style="width:25%">Para quién</th><th>Qué abre</th></tr>
+  <tr><td><code>…/exec</code></td><td>Solo tú</td><td><b>Configuración</b>: hoja de resultados, estado de la campaña, apuntes y tripulación. Contiene correos: no la proyectes.</td></tr>
+  <tr><td><code>…/exec?vista=alumno</code></td><td>El alumnado</td><td><b>La app de los alumnos</b>. Es el enlace que compartes, por ejemplo en Classroom.</td></tr>
+  <tr><td><code>…/exec?vista=puente</code></td><td>Solo tú (proyector)</td><td><b>Puente de mando</b>: la tripulación en directo, la clasificación y los botones de la campaña.</td></tr>
+</table>
+<div class="caja"><span class="t">No te preocupes por equivocarte de enlace</span><p>Un alumno que abra cualquiera de los tres llega siempre a su app; la configuración y el puente solo se abren con tu cuenta. Los dos últimos enlaces los tienes listos para copiar en la configuración, en la caja <b>Enlaces</b>.</p></div>
+<figure><img src="img/config-principal.png" alt=""><figcaption>Configuración: hoja de resultados, estado de la campaña, enlaces y apuntes.</figcaption></figure>
+
+<!-- ============================== 4. DÍA DE CLASE ============================== -->
+<h1><span class="num">4</span>El día de clase</h1>
+<p>La actividad está pensada para <b>una sola sesión</b>. Tú la diriges desde el <b>puente de mando</b>, proyectado en la pizarra (pulsa <b>F11</b> para verlo a pantalla completa): un único botón, arriba a la derecha, va avanzando la campaña.</p>
+<div class="caja aviso"><span class="t">Antes de la sesión</span>
+  <ul>
+    <li><b>Haz un ensayo</b> con un par de cuentas de alumno (o algún voluntario): recorre la campaña completa y comprueba cómo se ve el puente desde el fondo del aula.</li>
+    <li>Después del ensayo, en la configuración, pulsa <b>Nueva campaña</b> para empezar con la hoja limpia.</li>
+    <li>Publica el enlace <code>…/exec?vista=alumno</code> en Classroom.</li>
+  </ul>
+</div>
+
+<div class="estado">
+  <div class="etq">Cerrada<small>Estado inicial</small></div>
+  <div>
+    <p>Los alumnos que entran ven «Campaña no iniciada · Esperando a Control de Misión». No tienen que recargar: avanzarán solos cuando abras el hangar. En el puente, el botón dice <span class="boton">Abrir hangar</span>.</p>
+    <div class="dos">
+      <figure><img src="img/alumno-espera.jpg" alt=""><figcaption>Alumno: esperando.</figcaption></figure>
+      <figure><img src="img/puente-cerrada.png" alt=""><figcaption>Puente: campaña no iniciada.</figcaption></figure>
+    </div>
+  </div>
+</div>
+
+<div class="estado">
+  <div class="etq">Hangar<small>Tras pulsar «Abrir hangar»</small></div>
+  <div>
+    <p>Cada alumno diseña su astronauta y elige su <b>indicativo</b>: el nombre con el que aparecerá en el puente (3 a 20 caracteres, único en la clase; así nadie ve correos ni nombres reales). El astronauta y el indicativo son definitivos. Al confirmarlo, el alumno espera en la plataforma de lanzamiento y puede repasar las reglas.</p>
+    <div class="dos">
+      <figure><img src="img/alumno-editor.jpg" alt=""><figcaption>Alumno: diseño del astronauta.</figcaption></figure>
+      <figure><img src="img/alumno-hangar.jpg" alt=""><figcaption>Alumno: esperando la orden de despegue.</figcaption></figure>
+    </div>
+    <p>En el puente van apareciendo las tarjetas, y la cabecera indica cuántos están <b>listos</b> y cuántos siguen <b>en el hangar</b>. Cuando estén casi todos, pulsa <span class="boton">Iniciar campaña</span>: no hace falta esperar a los más lentos, que podrán terminar su astronauta ya con el reloj en marcha.</p>
+    <figure><img src="img/puente-hangar.jpg" alt=""><figcaption>Puente: la tripulación llegando al hangar.</figcaption></figure>
+  </div>
+</div>
+
+<div class="estado">
+  <div class="etq">En curso<small>Tras pulsar «Iniciar campaña»</small></div>
+  <div>
+    <p>Aparece una <b>cuenta atrás de 10 segundos</b> a la vez en el proyector y en todas las pantallas, y se abren las misiones. Durante la campaña, el puente se actualiza solo: las tarjetas se ordenan por estrellas (si hay empate, va delante quien llegó antes), los tres primeros llevan medalla, y hay efectos al ganar estrellas, al ascender de rango y al cumplir el objetivo.</p>
+    <div class="dos">
+      <figure><img src="img/alumno-cuenta.jpg" alt=""><figcaption>Cuenta atrás.</figcaption></figure>
+      <figure><img src="img/alumno-reglas.jpg" alt=""><figcaption>Reglas, siempre a mano en el botón «Reglas».</figcaption></figure>
+    </div>
+    <figure><img src="img/puente-curso.jpg" alt=""><figcaption>Puente durante la campaña, con quién está en misión en cada momento.</figcaption></figure>
+  </div>
+</div>
+
+<div class="estado">
+  <div class="etq">Finalizada<small>Tras pulsar «Terminar campaña»</small></div>
+  <div>
+    <p>Para terminar hay que <b>mantener pulsado</b> el botón de confirmación. Desde ese momento no se aceptan envíos y <b>las misiones a medias no cuentan</b> (0 ★): avisa en voz alta un par de minutos antes. Cada alumno ve su informe final, sin su puesto en la clasificación.</p>
+    <div class="dos">
+      <figure><img src="img/puente-terminar.jpg" alt=""><figcaption>Puente: confirmación para terminar.</figcaption></figure>
+      <figure><img src="img/alumno-final.jpg" alt=""><figcaption>Alumno: informe final.</figcaption></figure>
+    </div>
+  </div>
+</div>
+
+<div class="estado">
+  <div class="etq">Ceremonia<small>Botón final del puente</small></div>
+  <div>
+    <p>El botón pasa a <span class="boton">Ceremonia</span>: un podio en 3D con los tres primeros, que se revelan en orden (tercero, segundo y primero, con confeti). Puedes repetirla las veces que quieras; se cierra con «Volver al puente» o con Esc.</p>
+    <figure><img src="img/puente-ceremonia.jpg" alt=""><figcaption>Ceremonia de condecoración.</figcaption></figure>
+  </div>
+</div>
+
+<!-- ============================== 5. GESTIÓN ============================== -->
+<h1><span class="num">5</span>Gestión desde la configuración</h1>
+
+<h2><span class="num">5.1</span>Tripulación</h2>
+<p>La tabla muestra a todos los alumnos que han entrado, con su indicativo, estrellas, misiones y la misión en curso. Tiene un buscador y tres acciones por alumno (todas piden confirmación):</p>
+<table>
+  <tr><th style="width:26%">Acción</th><th>Para qué sirve</th></tr>
+  <tr><td><b>Desbloquear</b></td><td>Libera la misión en curso, por ejemplo si un alumno la empezó por error. Podrá volver a empezarla, con los mismos datos.</td></tr>
+  <tr><td><b>Reiniciar</b></td><td>Borra todas sus misiones y estrellas. El astronauta y el indicativo se conservan. No se puede deshacer.</td></tr>
+  <tr><td><b>Rediseñar avatar</b></td><td>La próxima vez que entre, pasará otra vez por el editor del astronauta.</td></tr>
+</table>
+<figure><img src="img/config-tripulacion.png" alt=""><figcaption>Tabla de tripulación (datos ficticios).</figcaption></figure>
+
+<h2><span class="num">5.2</span>Estado de la campaña</h2>
+<p>La campaña se controla desde el puente, pero si te equivocas (por ejemplo, terminas antes de tiempo) puedes cambiar el estado a mano desde la configuración. Si la vuelves a poner «En curso», las misiones se abren al momento, sin cuenta atrás, y los alumnos lo notan en unos segundos.</p>
+<figure class="estrecha" style="width:58%"><img src="img/config-estados.png" alt=""><figcaption>Cambio manual del estado.</figcaption></figure>
+
+<h2><span class="num">5.3</span>La hoja de resultados</h2>
+<p>Con <b>Abrir hoja</b> llegas a la hoja de cálculo. Tiene tres pestañas:</p>
+<ul>
+  <li><b>Alumnos</b>: una fila por alumno con correo, indicativo, estrellas totales, rango, número de misiones y las estrellas de cada misión. A partir de aquí puedes calcular la nota como prefieras.</li>
+  <li><b>Registro</b>: cada inicio y cada entrega, con la hora, la respuesta, la solución y el error cometido.</li>
+  <li><b>Campaña</b>: el estado y las horas de apertura, inicio y fin.</li>
+</ul>
+
+<h2><span class="num">5.4</span>Nueva campaña (cada curso o cada grupo)</h2>
+<p>El botón <b>Nueva campaña</b> crea una hoja de resultados nueva y vacía y la app pasa a usarla: toda la tripulación empieza de cero, astronauta incluido, y la campaña queda cerrada. <b>La hoja anterior se conserva</b> intacta en tu Drive.</p>
+<div class="caja"><span class="t">Varios grupos</span><p>Si das clase a dos grupos en días distintos, usa una nueva campaña para cada uno. Si los quieres a la vez, haz una copia del script por grupo (cada copia tiene su propia hoja).</p></div>
+
+<h2><span class="num">5.5</span>Restablecer la app</h2>
+<p>Al final de la configuración está la <b>zona de peligro</b>: el botón rojo desconecta la hoja de resultados y deja la app como recién instalada. La hoja no se borra. El botón de confirmación tarda 10 segundos en activarse, para evitar sustos.</p>
+<figure><img src="img/config-peligro.png" alt=""><figcaption>Zona de peligro.</figcaption></figure>
+
+<!-- ============================== 6. PROBLEMAS ============================== -->
+<h1><span class="num">6</span>Problemas frecuentes</h1>
+<div class="faq"><b class="q">Los alumnos ven «La actividad aún no está preparada».</b>Todavía no has creado la hoja de resultados: abre tu enlace <code>/exec</code> y créala (paso 2.4).</div>
+<div class="faq"><b class="q">La hoja de resultados aparece en «Mi unidad» y no en mi carpeta.</b>Falta el permiso de Drive: sigue el paso 2.3 y marca la casilla de Google Drive. La configuración muestra un aviso mientras falte.</div>
+<div class="faq"><b class="q">Un alumno ve «No se ha podido identificar tu cuenta».</b>Tiene que entrar con su cuenta del centro. Si en su navegador hay varias cuentas abiertas, que use un perfil de Chrome solo con la del centro.</div>
+<div class="faq"><b class="q">Al entrar toda la clase a la vez, a alguien le sale un error.</b>Que pulse <b>Reintentar</b>. Si estaba esperando la apertura del hangar, la app lo vuelve a intentar sola.</div>
+<div class="faq"><b class="q">Un alumno cerró la página en mitad de una misión.</b>No pasa nada: al volver a entrar, la misión le espera abierta y con los mismos datos (puede que tenga que volver a escribir lo que no había entregado).</div>
+<div class="faq"><b class="q">Un alumno empezó una misión por error.</b>Desde la configuración, <b>Desbloquear</b>. Si la tenía abierta, al intentar entregar la app le devuelve al panel.</div>
+<div class="faq"><b class="q">He terminado la campaña antes de tiempo.</b>En la configuración, cambia el estado a «En curso».</div>
+<div class="faq"><b class="q">Un indicativo no se acepta.</b>Solo admite letras, números, espacios, guion, punto y guion bajo, y tiene que empezar por letra o número. Tampoco puede repetir el de un compañero.</div>
+<div class="faq"><b class="q">Quiero que un alumno cambie su astronauta.</b>En la tabla de tripulación, <b>Rediseñar avatar</b>.</div>
+<div class="faq"><b class="q">¿Aparezco yo en la clasificación si pruebo la app de alumnos?</b>No: el profesor nunca sale en el puente, aunque se cree un astronauta para probar.</div>
+<div class="faq"><b class="q">¿Cómo actualizo a una versión nueva de la app?</b>Haz una copia nueva del script original y repite la instalación. Tus campañas anteriores siguen en sus hojas de resultados.</div>
+
+</body>
+</html>

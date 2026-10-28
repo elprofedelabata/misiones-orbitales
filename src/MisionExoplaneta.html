@@ -1,0 +1,713 @@
+<style>
+  /* =================================================================
+   * Misión «Cazador de exoplanetas»: observatorio con fotómetro y coronógrafo
+   * (reutiliza los estilos de la consola de «Ascenso orbital»)
+   * ================================================================= */
+  .observatorio { position: absolute; inset: 14px; z-index: 1; display: grid; grid-template-rows: minmax(0, 0.7fr) minmax(0, 1.3fr); gap: 10px; }
+  .obs-panel { position: relative; min-height: 0; display: flex; flex-direction: column; background: rgba(5, 8, 17, 0.7); border: 1px solid var(--hud-linea); }
+  .obs-cab { flex: none; display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-bottom: 1px solid var(--hud-linea); flex-wrap: wrap; }
+  .obs-tit { font: 600 11px 'Chakra Petch', sans-serif; letter-spacing: 0.2em; text-transform: uppercase; color: var(--hud-cian); }
+  .obs-ayuda { font: 11px 'Share Tech Mono', monospace; color: rgba(220,235,255,0.45); }
+  .obs-botones { margin-left: auto; display: flex; gap: 4px; }
+  .obs-botones button, .obs-tiempo button { min-width: 28px; height: 24px; padding: 0 8px; border: 1px solid var(--hud-linea-fuerte); background: rgba(255,255,255,0.04); color: var(--hud-blanco); cursor: pointer;
+    font: 600 11px 'Chakra Petch', sans-serif; letter-spacing: 0.1em; text-transform: uppercase; }
+  .obs-botones button:hover, .obs-tiempo button:hover { border-color: var(--hud-cian); color: var(--hud-cian); }
+  .lienzo-caja { position: relative; flex: 1; min-height: 0; }
+  .consola-vista .lienzo-caja canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
+  #lienzo-curva { cursor: crosshair; }
+  #lienzo-curva.arrastrando { cursor: grabbing; }
+  #lienzo-imagen { cursor: crosshair; outline: none; }
+  .obs-abajo { min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 190px; gap: 10px; }
+  .obs-tiempo { flex: none; display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-top: 1px solid var(--hud-linea); }
+  .obs-tiempo input[type=range] { flex: 1; accent-color: var(--hud-cian); }
+  .obs-lecturas { padding: 8px 10px; gap: 2px; justify-content: flex-start; overflow-y: auto; }
+  .lectura { display: flex; flex-direction: column; padding: 5px 0 6px; border-bottom: 1px solid rgba(200,230,255,0.08); }
+  .lectura > span { font: 600 9.5px 'Chakra Petch', sans-serif; letter-spacing: 0.18em; text-transform: uppercase; color: rgba(220,235,255,0.5); }
+  .lectura b { font: 400 15px 'Share Tech Mono', monospace; color: var(--hud-blanco); }
+  .lectura.marca b { color: var(--hud-ambar); }
+  .lectura.medida b { color: #ff9be0; }
+  .lectura.grande b { font-size: 18px; }
+  .lectura b.vacia .ud { display: none; }
+  .lectura .ud { font: inherit; }
+  .lectura small { font: 10.5px 'Share Tech Mono', monospace; color: rgba(220,235,255,0.4); }
+  .datos-exo { display: grid; gap: 2px; margin-top: 8px; }
+
+  @media (max-width: 860px) {
+    .consola-vista.con-observatorio { min-height: 760px; }
+    .obs-abajo { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) auto; }
+    .obs-lecturas { display: grid; grid-template-columns: 1fr 1fr; }
+  }
+</style>
+<script>
+/* =====================================================================
+ * Misión «Cazador de exoplanetas»: el alumno mide T en la curva de luz y r en
+ * las imágenes del coronógrafo, y calcula la masa de la estrella.
+ * ===================================================================== */
+
+function pantallaExoplaneta(m) {
+  limpiarVista();
+  E.mision = m;
+  document.body.classList.add('vista-consola');
+  const s = m.escena;
+  const claveP = 'prediccion-' + m.id;
+  let prediccion = null;
+  try { prediccion = sessionStorage.getItem(claveP); } catch (e) { /* sin almacenamiento */ }
+
+  app.innerHTML = `
+    <section class="consola">
+      <header class="consola-cab">
+        <span class="consola-icono">${iconoMision(m)}</span>
+        <div>
+          <div class="consola-kicker">MSN-${m.id} · Observatorio · ${esc(s.estrella)}</div>
+          <h1>${esc(m.titulo)}</h1>
+        </div>
+        <span class="dificultad">${dificultad(m.estrellas)}</span>
+        <span class="en-curso">🔒 Misión en curso · no se puede abandonar</span>
+      </header>
+      <div class="consola-cuerpo">
+        <div class="consola-vista con-observatorio" id="vista">
+          <div class="vista-hud vista-telemetria" id="telemetria" hidden></div>
+          <div class="vista-hud vista-fase" id="hud-fase" hidden><div class="fase" id="fase"></div><div class="hud-nombre">${esc(s.estrella)} b</div></div>
+          <div class="vista-hud vista-mensaje" id="mensaje"></div>
+        </div>
+        <aside class="consola-lateral" id="lateral">
+          <div class="bloque-hud orden">
+            <div class="bloque-hud-tit">Orden de Control de Misión</div>
+            <p>${esc(m.historia)}</p>
+            <div class="datos-exo">
+              <div class="hud-dato">G <b>${formatoNum(s.G)} N·m²/kg²</b></div>
+            </div>
+          </div>
+          <div class="bloque-hud paso-hud">
+            <div class="bloque-hud-tit"><span>01</span> Predicción</div>
+            <p class="orden" style="margin:0 0 8px;font-size:14px;color:rgba(225,235,255,.85)">Si la estrella tuviera el doble de masa, el planeta, en la misma órbita, tardaría en dar una vuelta…</p>
+            <div class="predicciones">
+              <button type="button" class="prediccion" data-p="mayor">Más</button>
+              <button type="button" class="prediccion" data-p="igual">Lo mismo</button>
+              <button type="button" class="prediccion" data-p="menor">Menos</button>
+            </div>
+            <p class="paso-nota">No puntúa: lo comprobarás al final.</p>
+          </div>
+          <div class="bloque-hud paso-hud" id="paso-maniobra">
+            <div class="bloque-hud-tit"><span>02</span> Masa de la estrella</div>
+            <div class="maniobra-entrada">
+              <span class="simbolo">M =</span>
+              <input class="in-mantisa" id="m0" inputmode="decimal" placeholder="mantisa" aria-label="Mantisa">
+              <span class="por-diez">·10^</span>
+              <input class="in-exp" id="e0" inputmode="numeric" placeholder="exp" aria-label="Exponente">
+              <span class="unidad">kg</span>
+            </div>
+            <div class="maniobra-previa" id="previa">Masa que se enviará a la agencia.</div>
+            <button id="btn-ejecutar" class="btn-hud btn-mantener" type="button" aria-label="Mantén pulsado para transmitir">
+              <span class="relleno"></span>
+              <svg class="icono" viewBox="0 0 20 20" aria-hidden="true"><polygon points="10,1 19,10 10,19 1,10" fill="none" stroke="currentColor" stroke-width="2"/><polygon points="10,6 14,10 10,14 6,10" fill="currentColor"/></svg>
+              <span class="txt">Mantén para transmitir</span>
+            </button>
+          </div>
+        </aside>
+      </div>
+    </section>`;
+
+  E.sim = crearObservatorio($('#vista'), s);
+
+  // predicción
+  const pasoManiobra = $('#paso-maniobra');
+  const marcarPred = () => {
+    app.querySelectorAll('.prediccion').forEach(b => b.classList.toggle('activa', b.dataset.p === prediccion));
+    pasoManiobra.classList.toggle('bloqueado', !prediccion);
+  };
+  app.querySelectorAll('.prediccion').forEach(b => b.addEventListener('click', () => {
+    prediccion = b.dataset.p;
+    try { sessionStorage.setItem(claveP, prediccion); } catch (e) { /* sin almacenamiento */ }
+    marcarPred();
+  }));
+  marcarPred();
+
+  // vista previa del número
+  const previa = $('#previa');
+  const actualizarPrevia = () => {
+    const v = leerNumeroCliente($('#m0').value, $('#e0').value);
+    if (!$('#m0').value.trim() && !$('#e0').value.trim()) { previa.textContent = 'Masa que se enviará a la agencia.'; previa.classList.remove('error'); return null; }
+    if (v === null) { previa.textContent = 'Formato no válido'; previa.classList.add('error'); return null; }
+    previa.classList.remove('error');
+    previa.textContent = 'M = ' + formatoNum(v, 4) + ' kg';
+    return v;
+  };
+  ['#m0', '#e0'].forEach(sel => $(sel).addEventListener('input', actualizarPrevia));
+
+  // transmitir (mantener pulsado): entrega, simula y muestra el informe
+  const boton = $('#btn-ejecutar'), txt = boton.querySelector('.txt');
+  const mantener = botonMantener(boton, 900, async () => {
+    const valor = actualizarPrevia();
+    if (valor === null) {
+      aviso('Escribe la masa en notación científica antes de transmitir.');
+      mantener.reiniciar();
+      return;
+    }
+    txt.textContent = 'Transmitiendo…';
+    E.estrellasAntes = E.inicio.estrellas;
+    let res;
+    try {
+      res = await llamar('entregarMision', m.id, [{ m: $('#m0').value.trim(), e: $('#e0').value.trim() }], { prediccion: prediccion });
+    } catch (err) {
+      aviso(mensajeError(err));
+      txt.textContent = 'Mantén para transmitir';
+      mantener.reiniciar();
+      return;
+    }
+    try { sessionStorage.removeItem(claveP); } catch (e) { /* sin almacenamiento */ }
+    E.inicio = res.inicio;
+    pintarBarra();
+    $('.en-curso').textContent = '⏳ Verificando el modelo';
+    mostrarEjecucion(`Masa transmitida <b>${formatoNum(valor, 4)} kg</b>`,
+      [['modelo', 'Modelo del sistema'], ['propagacion', 'Propagación de 3 órbitas'], ['comparacion', 'Comparación con la observación']], 'Verificando el modelo');
+    E.sim.destruir();
+    $('#vista').classList.remove('con-observatorio');
+    E.sim = crearSimExoplaneta($('#vista'), {
+      Tdias: res.extra.Tdias, r: res.extra.r, M: res.sol, Malumno: valor, estrellas: res.estrellas, alFase: faseEjecucion
+    });
+    E.sim.ejecutar(resultadoSim => informeExoplaneta(m, res, valor, resultadoSim));
+  }, () => {
+    txt.textContent = 'Mantén pulsado…';
+    clearTimeout(boton._t);
+    boton._t = setTimeout(() => { txt.textContent = 'Mantén para transmitir'; }, 1400);
+  });
+}
+
+function informeExoplaneta(m, res, valor, resultadoSim) {
+  const s = m.escena, x = res.extra;
+  $('.consola-cuerpo').classList.add('resultado');
+  const lateral = $('#lateral');
+  const estrellas = Array.from({ length: m.estrellas }, (_, i) =>
+    `<span style="animation-delay:${0.15 + i * 0.25}s" class="${i < res.estrellas ? '' : 'apagada'}">★</span>`).join('');
+  const textosPred = { mayor: 'más', igual: 'lo mismo', menor: 'menos' };
+  const pred = res.prediccion
+    ? `<p class="informe-pred">Predijiste que, con el doble de masa, el planeta tardaría <b class="${res.prediccion === 'menor' ? 'ok' : 'mal'}">${textosPred[res.prediccion]}</b>.
+        ${res.prediccion === 'menor' ? '¡Correcto!' : 'En realidad tardaría menos.'}
+        De \\(T = 2\\pi\\sqrt{r^3/(GM)}\\): con el doble de masa, el periodo se divide entre \\(\\sqrt2\\) y pasaría de ${formatoNum(x.Tdias, 3)} a ${formatoNum(x.Tdias / Math.SQRT2, 3)} días.</p>`
+    : '';
+  const titulo = res.estrellas === m.estrellas ? 'Estrella pesada con precisión' : res.estrellas > 0 ? 'Medida aceptable' : 'Medida fallida';
+
+  lateral.classList.remove('ejecutando');
+  lateral.classList.add('informe');
+  lateral.innerHTML = `
+    <div class="bloque-hud">
+      <div class="bloque-hud-tit">Informe de misión</div>
+      ${resultadoSim ? `<div class="informe-sim ${resultadoSim.ok ? 'ok' : 'mal'}">${esc(resultadoSim.texto)}</div>` : ''}
+      <div class="informe-estrellas">${estrellas}</div>
+      <div class="informe-resumen">${titulo} · ${res.estrellas} de ${m.estrellas} ★</div>
+    </div>
+    <div class="bloque-hud">
+      <div class="bloque-hud-tit">Masa de la estrella</div>
+      <table class="informe-tabla">
+        <tr><td>Tu masa</td><td>${formatoNum(valor, 4)} kg</td></tr>
+        <tr><td>Masa real</td><td>${formatoNum(res.sol, 4)} kg · ${formatoNum(res.sol / 1.989e30, 3)} M☉</td></tr>
+        <tr><td>Error relativo</td><td>${res.error === null ? 'signo incorrecto' : res.error < 0.0001 ? '< 0,01 %' : formatoNum(res.error * 100, 3) + ' %'}</td></tr>
+      </table>
+      <div class="informe-escala">${textoEscala(m.estrellas)}</div>
+    </div>
+    ${res.pista ? `<div class="informe-pista"><b>Diagnóstico</b>${esc(res.pista)}</div>` : ''}
+    <div class="bloque-hud">
+      <div class="bloque-hud-tit">Valores reales de la observación</div>
+      <table class="informe-tabla">
+        <tr><td>Periodo</td><td>${fijo(x.Tdias, 3)} días</td></tr>
+        <tr><td>Máxima separación</td><td>${formatoNum(x.rPx, 4)} px</td></tr>
+        <tr><td>Radio de la órbita</td><td>${formatoNum(x.r, 4)} m</td></tr>
+      </table>
+      <div class="informe-escala">Compáralos con tus medidas.</div>
+    </div>
+    ${pred ? `<div class="bloque-hud"><div class="bloque-hud-tit">Tu predicción</div>${pred}</div>` : ''}
+    <div class="bloque-hud">
+      <div class="bloque-hud-tit">Resolución</div>
+      <ol class="pasos">${res.pasos.map(p => `<li>${p}</li>`).join('')}</ol>
+    </div>
+    <button id="btn-volver" class="btn-hud principal" type="button">Volver al registro de misiones</button>`;
+  renderMates(lateral);
+  lateral.scrollTop = 0;
+  $('.en-curso').textContent = '✓ Misión completada';
+  $('#btn-volver').addEventListener('click', pantallaPanel);
+  celebrar(E.estrellasAntes, res.inicio.estrellas, res.inicio.objetivo);
+}
+
+/* ---------------------------- Observatorio ---------------------------- */
+
+/** Número con coma decimal y un número fijo de decimales. */
+function fijo(x, d) { return x.toFixed(d).replace('.', ','); }
+
+/**
+ * Fotómetro (curva de luz con zoom, desplazamiento y dos marcadores) y coronógrafo
+ * (imagen en el instante elegido con la barra de tiempo, regla con lupa y ajuste fino).
+ */
+function crearObservatorio(cont, s) {
+  const img = s.imagen;
+  const raiz = document.createElement('div');
+  raiz.className = 'observatorio';
+  raiz.innerHTML = `
+    <section class="obs-panel">
+      <header class="obs-cab">
+        <span class="obs-tit">Fotómetro · curva de luz</span>
+        <span class="obs-ayuda">Rueda: ampliar · Arrastrar: desplazar · Clic: marcador</span>
+        <div class="obs-botones">
+          <button type="button" data-acc="menos" aria-label="Reducir">−</button>
+          <button type="button" data-acc="mas" aria-label="Ampliar">+</button>
+          <button type="button" data-acc="todo">Ver todo</button>
+          <button type="button" data-acc="borrar">Borrar marcas</button>
+        </div>
+      </header>
+      <div class="lienzo-caja"><canvas id="lienzo-curva"></canvas></div>
+    </section>
+    <div class="obs-abajo">
+      <section class="obs-panel">
+        <header class="obs-cab">
+          <span class="obs-tit">Coronógrafo</span>
+          <span class="obs-ayuda">Arrastra para medir · Flechas: ajuste fino</span>
+          <div class="obs-botones"><button type="button" data-acc="regla">Borrar regla</button></div>
+        </header>
+        <div class="lienzo-caja"><canvas id="lienzo-imagen" tabindex="0" aria-label="Imagen del coronógrafo"></canvas></div>
+        <div class="obs-tiempo">
+          <button type="button" data-paso="-0.1" aria-label="Retroceder 0,1 días">◀</button>
+          <input type="range" id="tiempo" min="0" max="${s.dias}" step="0.01" value="0" aria-label="Tiempo de la imagen">
+          <button type="button" data-paso="0.1" aria-label="Avanzar 0,1 días">▶</button>
+        </div>
+      </section>
+      <section class="obs-panel obs-lecturas">
+        <div class="lectura marca"><span>Marcador A</span><b class="vacia"><span id="l-a">—</span> <abbr class="ud" data-ayuda="d = día terrestre (24 h)">d</abbr></b></div>
+        <div class="lectura marca"><span>Marcador B</span><b class="vacia"><span id="l-b">—</span> <abbr class="ud" data-ayuda="d = día terrestre (24 h)">d</abbr></b></div>
+        <div class="lectura marca grande"><span>Δt = B − A</span><b class="vacia"><span id="l-dt">—</span> <abbr class="ud" data-ayuda="d = día terrestre (24 h)">d</abbr></b></div>
+        <div class="lectura"><span>Tiempo de la imagen</span><b><span id="l-t">—</span> <abbr class="ud" data-ayuda="d = día terrestre (24 h)">d</abbr></b></div>
+        <div class="lectura medida grande"><span>Regla</span><b id="l-regla">—</b></div>
+        <div class="lectura"><span>Escala de la imagen</span><b>1 px = ${formatoNum(img.escala)} m</b></div>
+      </section>
+    </div>`;
+  cont.insertBefore(raiz, cont.firstChild);
+
+  const lzC = raiz.querySelector('#lienzo-curva'), lzI = raiz.querySelector('#lienzo-imagen');
+  const ctxC = lzC.getContext('2d'), ctxI = lzI.getContext('2d');
+  const deslizador = raiz.querySelector('#tiempo');
+  const dpr = () => Math.min(window.devicePixelRatio || 1, 2);
+  const ajustarLienzo = (lz, ctx) => {
+    const w = lz.clientWidth, h = lz.clientHeight, k = dpr();
+    if (lz.width !== Math.round(w * k) || lz.height !== Math.round(h * k)) { lz.width = Math.round(w * k); lz.height = Math.round(h * k); }
+    ctx.setTransform(k, 0, 0, k, 0, 0);
+    return [w, h];
+  };
+
+  // ------------------------- curva de luz -------------------------
+  const datos = s.flujo;                        // (brillo − 1)·10⁵, null en los huecos
+  const validos = datos.filter(v => v !== null);
+  const yMin = Math.min(...validos) * 1.12, yMax = Math.max(...validos) * 1.6;
+  let v0 = 0, v1 = s.dias;                      // ventana visible (días)
+  let tImg = 0;                                 // instante de la imagen del coronógrafo
+  const marcas = [];                            // [tA, tB]
+  const M = { izq: 56, der: 12, arr: 10, aba: 24 };
+  let geoC = null;
+
+  function pintarCurva() {
+    const [W, H] = ajustarLienzo(lzC, ctxC);
+    const x0 = M.izq, x1 = W - M.der, y0 = M.arr, y1 = H - M.aba;
+    geoC = { x0, x1, y0, y1 };
+    const X = t => x0 + (t - v0) / (v1 - v0) * (x1 - x0);
+    const Y = v => y1 - (v - yMin) / (yMax - yMin) * (y1 - y0);
+    ctxC.clearRect(0, 0, W, H);
+    // rejilla y ejes
+    ctxC.font = '10.5px "Share Tech Mono", monospace';
+    ctxC.strokeStyle = 'rgba(63,224,255,0.1)'; ctxC.fillStyle = 'rgba(220,235,255,0.5)'; ctxC.lineWidth = 1;
+    const ancho = v1 - v0;
+    const paso = [0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20].find(p => (x1 - x0) / (ancho / p) >= 64) || 20;
+    ctxC.textAlign = 'center';
+    for (let t = Math.ceil(v0 / paso) * paso; t <= v1 + 1e-9; t += paso) {
+      const x = X(t);
+      ctxC.beginPath(); ctxC.moveTo(x, y0); ctxC.lineTo(x, y1); ctxC.stroke();
+      if (x < x1 - 60) ctxC.fillText(fijo(t, paso < 0.1 ? 2 : paso < 1 ? 1 : 0), x, y1 + 15);   // deja sitio a «t (días)»
+    }
+    ctxC.textAlign = 'right';
+    const pasoY = [100, 200, 250, 500, 1000].find(p => (yMax - yMin) / p <= 6) || 1000;
+    for (let v = Math.ceil(yMin / pasoY) * pasoY; v <= yMax; v += pasoY) {
+      const y = Y(v);
+      ctxC.beginPath(); ctxC.moveTo(x0, y); ctxC.lineTo(x1, y); ctxC.stroke();
+      ctxC.fillText(fijo(1 + v / 1e5, 3), x0 - 6, y + 3.5);
+    }
+    ctxC.save(); ctxC.translate(12, (y0 + y1) / 2); ctxC.rotate(-Math.PI / 2); ctxC.textAlign = 'center';
+    ctxC.fillText('BRILLO RELATIVO', 0, 0); ctxC.restore();
+    ctxC.textAlign = 'right'; ctxC.fillText('t (días)', x1, y1 + 15 + 0);
+    // puntos
+    ctxC.save(); ctxC.beginPath(); ctxC.rect(x0, y0, x1 - x0, y1 - y0); ctxC.clip();
+    const i0 = Math.max(0, Math.floor(v0 / s.cadencia) - 1), i1 = Math.min(datos.length - 1, Math.ceil(v1 / s.cadencia) + 1);
+    const tam = Math.max(1.4, Math.min(3, (x1 - x0) / (i1 - i0) * 0.5));
+    ctxC.fillStyle = 'rgba(160,220,255,0.75)';
+    for (let i = i0; i <= i1; i++) {
+      if (datos[i] === null) continue;
+      ctxC.fillRect(X(i * s.cadencia) - tam / 2, Y(datos[i]) - tam / 2, tam, tam);
+    }
+    // huecos de observación
+    ctxC.fillStyle = 'rgba(255,255,255,0.035)';
+    let ini = null;
+    for (let i = i0; i <= i1 + 1; i++) {
+      const hueco = i <= i1 && datos[i] === null;
+      if (hueco && ini === null) ini = i;
+      if (!hueco && ini !== null) { ctxC.fillRect(X(ini * s.cadencia), y0, X(i * s.cadencia) - X(ini * s.cadencia), y1 - y0); ini = null; }
+    }
+    // instante de la imagen
+    const xi = X(tImg);
+    ctxC.strokeStyle = 'rgba(63,224,255,0.9)'; ctxC.setLineDash([4, 4]);
+    ctxC.beginPath(); ctxC.moveTo(xi, y0); ctxC.lineTo(xi, y1); ctxC.stroke(); ctxC.setLineDash([]);
+    // marcadores
+    marcas.forEach((t, k) => {
+      const x = X(t);
+      ctxC.strokeStyle = '#ffb92e'; ctxC.lineWidth = 1.5;
+      ctxC.beginPath(); ctxC.moveTo(x, y0); ctxC.lineTo(x, y1); ctxC.stroke();
+      ctxC.fillStyle = '#ffb92e'; ctxC.font = '700 11px "Chakra Petch", sans-serif'; ctxC.textAlign = 'left';
+      ctxC.fillText(k ? 'B' : 'A', x + 4, y0 + 12);
+    });
+    ctxC.restore();
+    ctxC.strokeStyle = 'rgba(200,230,255,0.3)'; ctxC.strokeRect(x0 + 0.5, y0 + 0.5, x1 - x0 - 1, y1 - y0 - 1);
+  }
+
+  const tDeX = x => v0 + (x - geoC.x0) / (geoC.x1 - geoC.x0) * (v1 - v0);
+  const limitar = () => {
+    const ancho = Math.min(s.dias, Math.max(0.4, v1 - v0));
+    if (v0 < 0) v0 = 0;
+    v1 = v0 + ancho;
+    if (v1 > s.dias) { v1 = s.dias; v0 = v1 - ancho; }
+  };
+  const ampliar = (factor, centro) => {
+    const c = centro === undefined ? (v0 + v1) / 2 : centro;
+    v0 = c - (c - v0) * factor; v1 = c + (v1 - c) * factor;
+    limitar(); pintarCurva();
+  };
+  lzC.addEventListener('wheel', ev => {
+    ev.preventDefault();
+    const r = lzC.getBoundingClientRect();
+    ampliar(ev.deltaY > 0 ? 1.25 : 0.8, tDeX(ev.clientX - r.left));
+  }, { passive: false });
+  let arrastre = null;
+  lzC.addEventListener('pointerdown', ev => {
+    if (ev.button !== 0) return;
+    lzC.setPointerCapture(ev.pointerId);
+    arrastre = { x: ev.clientX, v0: v0, v1: v1, movido: false };
+  });
+  lzC.addEventListener('pointermove', ev => {
+    if (!arrastre) return;
+    const dx = ev.clientX - arrastre.x;
+    if (Math.abs(dx) > 4) { arrastre.movido = true; lzC.classList.add('arrastrando'); }
+    if (!arrastre.movido) return;
+    const dt = -dx / (geoC.x1 - geoC.x0) * (arrastre.v1 - arrastre.v0);
+    v0 = arrastre.v0 + dt; v1 = arrastre.v1 + dt; limitar(); pintarCurva();
+  });
+  lzC.addEventListener('pointerup', ev => {
+    if (!arrastre) return;
+    const clic = !arrastre.movido;
+    arrastre = null; lzC.classList.remove('arrastrando');
+    if (!clic) return;
+    const r = lzC.getBoundingClientRect();
+    const x = ev.clientX - r.left;
+    if (x < geoC.x0 || x > geoC.x1) return;
+    const t = tDeX(x);
+    if (marcas.length < 2) marcas.push(t);
+    else { const k = Math.abs(marcas[0] - t) <= Math.abs(marcas[1] - t) ? 0 : 1; marcas[k] = t; }
+    pintarCurva(); lecturas();
+  });
+  raiz.querySelectorAll('.obs-botones button').forEach(b => b.addEventListener('click', () => {
+    const a = b.dataset.acc;
+    if (a === 'mas') ampliar(0.6);
+    else if (a === 'menos') ampliar(1 / 0.6);
+    else if (a === 'todo') { v0 = 0; v1 = s.dias; pintarCurva(); }
+    else if (a === 'borrar') { marcas.length = 0; pintarCurva(); lecturas(); }
+    else if (a === 'regla') { regla = null; activo = null; pintarImagen(); lecturas(); }
+  }));
+
+  // -------------------------- coronógrafo --------------------------
+  const DET = 1000;                             // la imagen tiene 1000 × 1000 píxeles
+  const off = document.createElement('canvas');
+  off.width = DET; off.height = DET;
+  const octx = off.getContext('2d');
+  // fondo fijo: ruido de lectura, motas y halo de la estrella
+  const fondo = document.createElement('canvas');
+  fondo.width = DET; fondo.height = DET;
+  (() => {
+    const f = fondo.getContext('2d');
+    let h = 7;
+    const azar = () => { h = (h * 16807) % 2147483647; return h / 2147483647; };
+    f.fillStyle = '#03050b'; f.fillRect(0, 0, DET, DET);
+    for (let i = 0; i < 2600; i++) {
+      f.fillStyle = `rgba(150,180,255,${0.04 + azar() * 0.12})`;
+      f.fillRect(azar() * DET, azar() * DET, 1 + azar() * 1.5, 1 + azar() * 1.5);
+    }
+    const halo = f.createRadialGradient(500, 500, 40, 500, 500, 420);
+    halo.addColorStop(0, 'rgba(255,236,200,0.5)'); halo.addColorStop(0.25, 'rgba(255,214,160,0.16)'); halo.addColorStop(1, 'rgba(255,200,150,0)');
+    f.fillStyle = halo; f.fillRect(0, 0, DET, DET);
+    // motas del halo (speckles)
+    for (let i = 0; i < 260; i++) {
+      const a = azar() * Math.PI * 2, d = img.mascara + 10 + Math.pow(azar(), 2) * 260;
+      f.fillStyle = `rgba(255,230,200,${0.08 + azar() * 0.18})`;
+      f.beginPath(); f.arc(500 + Math.cos(a) * d, 500 + Math.sin(a) * d, 1 + azar() * 2.5, 0, Math.PI * 2); f.fill();
+    }
+    // aspas de difracción
+    f.strokeStyle = 'rgba(255,230,200,0.08)'; f.lineWidth = 3;
+    [0, Math.PI / 2].forEach(a => { f.beginPath(); f.moveTo(500 - Math.cos(a) * 460, 500 - Math.sin(a) * 460); f.lineTo(500 + Math.cos(a) * 460, 500 + Math.sin(a) * 460); f.stroke(); });
+    // máscara del coronógrafo y cruz en el centro de la estrella
+    f.fillStyle = '#05070d'; f.beginPath(); f.arc(500, 500, img.mascara, 0, Math.PI * 2); f.fill();
+    f.strokeStyle = 'rgba(63,224,255,0.45)'; f.lineWidth = 1.5; f.beginPath(); f.arc(500, 500, img.mascara, 0, Math.PI * 2); f.stroke();
+    f.strokeStyle = 'rgba(63,224,255,0.8)'; f.lineWidth = 1;
+    f.beginPath(); f.moveTo(486, 500); f.lineTo(514, 500); f.moveTo(500, 486); f.lineTo(500, 514); f.stroke();
+  })();
+
+  const ang = img.angulo * Math.PI / 180;
+  const separacion = t => {
+    const k = t / img.paso, i = Math.floor(k), f = k - i;
+    const a = img.sep[Math.max(0, Math.min(img.sep.length - 1, i))], b = img.sep[Math.max(0, Math.min(img.sep.length - 1, i + 1))];
+    return a + (b - a) * f;
+  };
+  function componer() {
+    octx.drawImage(fondo, 0, 0);
+    const sp = separacion(tImg);
+    if (Math.abs(sp) > img.mascara * 0.92) {
+      const px = 500 + sp * Math.cos(ang), py = 500 - sp * Math.sin(ang);
+      const g = octx.createRadialGradient(px, py, 0, px, py, 16);
+      g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.3, 'rgba(225,240,255,0.95)'); g.addColorStop(1, 'rgba(160,200,255,0)');
+      octx.fillStyle = g; octx.beginPath(); octx.arc(px, py, 16, 0, Math.PI * 2); octx.fill();
+    }
+    // barra de escala
+    const largo = img.barM / img.escala;
+    octx.strokeStyle = '#f4f7ff'; octx.lineWidth = 3;
+    octx.beginPath(); octx.moveTo(40, 950); octx.lineTo(40 + largo, 950);
+    octx.moveTo(40, 940); octx.lineTo(40, 960); octx.moveTo(40 + largo, 940); octx.lineTo(40 + largo, 960); octx.stroke();
+    octx.fillStyle = '#f4f7ff'; octx.font = '34px "Share Tech Mono", monospace'; octx.textAlign = 'left';
+    octx.fillText(formatoNum(img.barM) + ' m', 40, 924);
+    octx.textAlign = 'left'; octx.fillText('t = ' + fijo(tImg, 2) + ' d', 30, 56);
+    octx.textAlign = 'right'; octx.fillStyle = 'rgba(63,224,255,0.75)'; octx.fillText(s.estrella, 970, 56);
+  }
+
+  let regla = null;                             // { a: [x, y], b: [x, y] } en píxeles de la imagen
+  let activo = null;                            // extremo que se ajusta con las flechas ('a' | 'b')
+  let puntero = null;                           // posición del puntero (píxeles de la imagen) para la lupa
+  let geoI = null;
+  function pintarImagen() {
+    const [W, H] = ajustarLienzo(lzI, ctxI);
+    const lado = Math.min(W, H) - 8, ox = (W - lado) / 2, oy = (H - lado) / 2;
+    geoI = { ox, oy, k: lado / DET };
+    componer();
+    ctxI.clearRect(0, 0, W, H);
+    ctxI.imageSmoothingEnabled = true;
+    ctxI.drawImage(off, ox, oy, lado, lado);
+    ctxI.strokeStyle = 'rgba(200,230,255,0.25)'; ctxI.strokeRect(ox + 0.5, oy + 0.5, lado - 1, lado - 1);
+    const P = q => [ox + q[0] * geoI.k, oy + q[1] * geoI.k];
+    if (regla) {
+      const a = P(regla.a), b = P(regla.b);
+      ctxI.strokeStyle = '#ff9be0'; ctxI.lineWidth = 1.5;
+      ctxI.beginPath(); ctxI.moveTo(a[0], a[1]); ctxI.lineTo(b[0], b[1]); ctxI.stroke();
+      [['a', a], ['b', b]].forEach(([n, p]) => {
+        ctxI.beginPath(); ctxI.arc(p[0], p[1], n === activo ? 5 : 3.5, 0, Math.PI * 2);
+        ctxI.fillStyle = n === activo ? '#ff9be0' : 'rgba(255,155,224,0.35)'; ctxI.fill(); ctxI.stroke();
+      });
+    }
+    // lupa: región de 60 × 60 px alrededor del puntero (o del extremo activo), ampliada
+    const foco = puntero || (regla && activo ? regla[activo] : null);
+    if (foco) {
+      // en la esquina opuesta al puntero, para no tapar lo que se está midiendo
+      const L = Math.min(130, lado * 0.36), R = 30;
+      const lx = foco[0] > DET / 2 ? ox + 8 : ox + lado - L - 8, ly = foco[1] > DET / 2 ? oy + 8 : oy + lado - L - 8;
+      ctxI.save();
+      ctxI.fillStyle = '#000'; ctxI.fillRect(lx, ly, L, L);
+      ctxI.imageSmoothingEnabled = false;
+      ctxI.drawImage(off, foco[0] - R, foco[1] - R, 2 * R, 2 * R, lx, ly, L, L);
+      const z = L / (2 * R), Q = q => [lx + (q[0] - foco[0] + R) * z, ly + (q[1] - foco[1] + R) * z];
+      ctxI.beginPath(); ctxI.rect(lx, ly, L, L); ctxI.clip();
+      if (regla) {
+        const a = Q(regla.a), b = Q(regla.b);
+        ctxI.strokeStyle = '#ff9be0'; ctxI.lineWidth = 1.2;
+        ctxI.beginPath(); ctxI.moveTo(a[0], a[1]); ctxI.lineTo(b[0], b[1]); ctxI.stroke();
+      }
+      ctxI.strokeStyle = 'rgba(63,224,255,0.9)'; ctxI.lineWidth = 1;
+      ctxI.beginPath(); ctxI.moveTo(lx + L / 2 - 8, ly + L / 2); ctxI.lineTo(lx + L / 2 + 8, ly + L / 2);
+      ctxI.moveTo(lx + L / 2, ly + L / 2 - 8); ctxI.lineTo(lx + L / 2, ly + L / 2 + 8); ctxI.stroke();
+      ctxI.restore();
+      ctxI.strokeStyle = 'rgba(63,224,255,0.6)'; ctxI.strokeRect(lx + 0.5, ly + 0.5, L - 1, L - 1);
+      ctxI.font = '600 9.5px "Chakra Petch", sans-serif'; ctxI.fillStyle = 'rgba(63,224,255,0.85)'; ctxI.textAlign = 'right';
+      ctxI.fillText('LUPA', lx + L - 4, ly + L - 5);
+    }
+  }
+
+  const aImagen = ev => {
+    const r = lzI.getBoundingClientRect();
+    return [(ev.clientX - r.left - geoI.ox) / geoI.k, (ev.clientY - r.top - geoI.oy) / geoI.k];
+  };
+  let arrastreI = null;
+  lzI.addEventListener('pointerdown', ev => {
+    if (ev.button !== 0) return;
+    lzI.focus();
+    lzI.setPointerCapture(ev.pointerId);
+    const p = aImagen(ev);
+    const cerca = n => regla && Math.hypot(regla[n][0] - p[0], regla[n][1] - p[1]) * geoI.k < 10;
+    if (cerca('b')) arrastreI = 'b';
+    else if (cerca('a')) arrastreI = 'a';
+    else { regla = { a: p, b: p.slice() }; arrastreI = 'b'; }
+    activo = arrastreI;
+    puntero = p;
+    pintarImagen(); lecturas();
+  });
+  lzI.addEventListener('pointermove', ev => {
+    puntero = aImagen(ev);
+    if (arrastreI) regla[arrastreI] = puntero.slice();
+    pintarImagen(); if (arrastreI) lecturas();
+  });
+  lzI.addEventListener('pointerup', () => { arrastreI = null; });
+  lzI.addEventListener('pointerleave', () => { if (!arrastreI) { puntero = null; pintarImagen(); } });
+  lzI.addEventListener('keydown', ev => {
+    if (!regla || !activo) return;
+    const d = ev.shiftKey ? 5 : 0.5;
+    const mov = { ArrowLeft: [-d, 0], ArrowRight: [d, 0], ArrowUp: [0, -d], ArrowDown: [0, d] }[ev.key];
+    if (!mov) return;
+    ev.preventDefault();
+    regla[activo][0] += mov[0]; regla[activo][1] += mov[1];
+    pintarImagen(); lecturas();
+  });
+
+  // tiempo de la imagen
+  const ponerTiempo = t => {
+    tImg = Math.max(0, Math.min(s.dias, t));
+    deslizador.value = tImg;
+    pintarImagen(); pintarCurva(); lecturas();
+  };
+  deslizador.addEventListener('input', () => ponerTiempo(Number(deslizador.value)));
+  raiz.querySelectorAll('[data-paso]').forEach(b => b.addEventListener('click', () => ponerTiempo(tImg + Number(b.dataset.paso))));
+
+  // lecturas
+  function lecturas() {
+    // el valor cambia; la unidad (con su tooltip) es fija y se oculta mientras no hay valor
+    const poner = (id, v, dec) => {
+      const el = raiz.querySelector(id);
+      el.textContent = v === null ? '—' : fijo(v, dec);
+      el.parentNode.classList.toggle('vacia', v === null);
+    };
+    poner('#l-a', marcas[0] === undefined ? null : marcas[0], 3);
+    poner('#l-b', marcas[1] === undefined ? null : marcas[1], 3);
+    poner('#l-dt', marcas.length < 2 ? null : marcas[1] - marcas[0], 3);
+    poner('#l-t', tImg, 2);
+    raiz.querySelector('#l-regla').textContent = regla ? fijo(Math.hypot(regla.b[0] - regla.a[0], regla.b[1] - regla.a[1]), 1) + ' px' : '—';
+  }
+
+  const ro = new ResizeObserver(() => { pintarCurva(); pintarImagen(); });
+  ro.observe(lzC); ro.observe(lzI);
+  pintarCurva(); pintarImagen(); lecturas();
+
+  return { destruir() { ro.disconnect(); raiz.remove(); } };
+}
+
+/* --------------------------- Simulador ---------------------------- */
+
+/**
+ * Comprobación del modelo: vista cenital del sistema. El planeta observado gira con su periodo real;
+ * el planeta «modelo» gira con el periodo que daría la masa del alumno en la misma órbita.
+ */
+function crearSimExoplaneta(cont, p) {
+  const lienzo = document.createElement('canvas');
+  cont.insertBefore(lienzo, cont.firstChild);
+  const ctx = lienzo.getContext('2d');
+  let W = 0, H = 0;
+  const fondo = Array.from({ length: 170 }, () => ({ x: Math.random(), y: Math.random(), r: Math.random() * 1.1 + 0.2, a: Math.random() * 0.6 + 0.2 }));
+  const ajustar = () => {
+    const k = Math.min(window.devicePixelRatio || 1, 2);
+    W = cont.clientWidth; H = cont.clientHeight;
+    lienzo.width = W * k; lienzo.height = H * k;
+    ctx.setTransform(k, 0, 0, k, 0, 0);
+  };
+  const ro = new ResizeObserver(ajustar);
+  ro.observe(cont);
+  ajustar();
+
+  const tel = $('#telemetria'), elFase = $('#fase');
+  tel.hidden = false; $('#hud-fase').hidden = false;
+  const valida = p.Malumno > 0;
+  const Tm = valida ? p.Tdias * Math.sqrt(p.M / p.Malumno) : null;   // periodo con la masa del alumno
+  const ORBITAS = 3, DUR = 9;                                           // 3 órbitas reales en 9 s
+  let fase = 'espera', tFase = 0, tSim = 0, detenido = false, alFinal = null;
+  const estela = [];
+  const nombres = { modelo: 'Modelo del sistema', propagacion: 'Propagación de 3 órbitas', comparacion: 'Comparación con la observación', abortada: 'Modelo no válido' };
+  const ponerFase = nf => { fase = nf; tFase = 0; elFase.textContent = nombres[nf]; if (p.alFase) p.alFase(nf, nombres[nf]); };
+  elFase.textContent = 'En espera';
+
+  function terminar() {
+    if (detenido) return;
+    detenido = true;
+    let texto, ok = false;
+    if (!valida) texto = 'Modelo no válido: la masa debe ser positiva';
+    else {
+      const desfase = Math.abs(ORBITAS * (Tm - p.Tdias));               // días tras 3 órbitas
+      const cuanto = desfase < 1 ? formatoNum(desfase * 24, 2) + ' h' : formatoNum(desfase, 3) + ' días';
+      ok = p.estrellas > 0;
+      texto = ok ? 'Tu modelo sigue al planeta: desfase de ' + cuanto + ' tras 3 órbitas'
+        : 'Tu modelo se desacompasa: ' + cuanto + ' de desfase tras 3 órbitas';
+    }
+    const msg = $('#mensaje');
+    msg.textContent = texto;
+    msg.className = 'vista-hud vista-mensaje ' + (ok ? 'ok' : 'mal');
+    if (alFinal) { const cb = alFinal; alFinal = null; setTimeout(() => cb({ texto: texto, ok: ok }), 900); }
+  }
+
+  function avanzar(dt) {
+    if (detenido || fase === 'espera') return;
+    tFase += dt;
+    if (fase === 'abortada') { if (tFase > 1.2) terminar(); return; }
+    if (fase === 'modelo') { if (tFase > 1) ponerFase('propagacion'); return; }
+    if (fase === 'propagacion') {
+      tSim = Math.min(ORBITAS * p.Tdias, tSim + dt * ORBITAS * p.Tdias / DUR);
+      if (tSim >= ORBITAS * p.Tdias) ponerFase('comparacion');
+      return;
+    }
+    if (fase === 'comparacion' && tFase > 1) terminar();
+  }
+
+  let vivo = true, previo = performance.now(), t = 0;
+  function bucle(ahora) {
+    if (!vivo) return;
+    const dt = Math.min(0.05, (ahora - previo) / 1000);
+    previo = ahora; t += dt;
+    avanzar(dt);
+    ctx.clearRect(0, 0, W, H);
+    fondo.forEach(st => { ctx.globalAlpha = st.a; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(st.x * W, st.y * H, st.r, 0, Math.PI * 2); ctx.fill(); });
+    ctx.globalAlpha = 1;
+    const cx = W / 2, cy = H / 2 - 10, R = Math.min(W, H) * 0.34;
+    // línea de visión hacia el telescopio
+    ctx.save(); ctx.setLineDash([3, 6]); ctx.strokeStyle = 'rgba(63,224,255,0.35)';
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx, H - 40); ctx.stroke(); ctx.restore();
+    ctx.font = '600 10.5px "Chakra Petch", sans-serif'; ctx.fillStyle = 'rgba(63,224,255,0.7)'; ctx.textAlign = 'center';
+    ctx.fillText('▼ HACIA EL TELESCOPIO', cx, H - 26);
+    // órbita y estrella
+    ctx.save(); ctx.setLineDash([5, 7]); ctx.strokeStyle = 'rgba(200,230,255,0.35)';
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+    ctx.fillText('r = ' + formatoNum(p.r, 3) + ' m', cx, cy - R - 10);
+    const halo = ctx.createRadialGradient(cx, cy, 2, cx, cy, 40);
+    halo.addColorStop(0, '#fff8e6'); halo.addColorStop(0.3, 'rgba(255,214,140,0.8)'); halo.addColorStop(1, 'rgba(255,170,80,0)');
+    ctx.fillStyle = halo; ctx.beginPath(); ctx.arc(cx, cy, 40, 0, Math.PI * 2); ctx.fill();
+    // planetas: empiezan en tránsito (entre la estrella y el telescopio)
+    const pos = T => { const a = Math.PI / 2 - 2 * Math.PI * tSim / T; return [cx + R * Math.cos(a), cy + R * Math.sin(a)]; };
+    const real = pos(p.Tdias);
+    if (fase === 'propagacion') { estela.push(real); if (estela.length > 90) estela.shift(); }
+    if (estela.length > 1) {
+      ctx.strokeStyle = 'rgba(63,224,255,0.35)'; ctx.lineWidth = 2; ctx.beginPath();
+      estela.forEach((q, i) => i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ctx.stroke();
+    }
+    ctx.fillStyle = '#3fe0ff'; ctx.beginPath(); ctx.arc(real[0], real[1], 7, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(63,224,255,0.9)'; ctx.textAlign = 'left'; ctx.fillText('OBSERVADO', real[0] + 11, real[1] - 8);
+    if (valida && fase !== 'espera') {
+      const mod = pos(Tm);
+      ctx.strokeStyle = '#ffb92e'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(mod[0], mod[1], 10, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = '#ffb92e'; ctx.fillText('TU MODELO', mod[0] + 13, mod[1] + 14);
+    }
+    tel.innerHTML = `TIEMPO <b>${fijo(tSim, 2)} d</b><br>PERIODO OBSERVADO <b>${fijo(p.Tdias, 3)} d</b>` +
+      (valida ? `<br>PERIODO CON TU MASA <b>${Tm < 1e4 ? fijo(Tm, 3) + ' d' : formatoNum(Tm, 3) + ' d'}</b>` : '');
+    requestAnimationFrame(bucle);
+  }
+  requestAnimationFrame(bucle);
+
+  return {
+    ejecutar(alTerminar) {
+      alFinal = alTerminar;
+      $('#mensaje').textContent = '';
+      ponerFase(valida ? 'modelo' : 'abortada');
+    },
+    destruir() { vivo = false; ro.disconnect(); lienzo.remove(); }
+  };
+}
+</script>

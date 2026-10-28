@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <?!= include('Estilos'); ?>
+  <style>
+    /* =================================================================
+     * Puente de mando: la tripulación proyectada en clase (solo el profesor)
+     * ================================================================= */
+    body.puente { height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+    .pm-cab { flex: none; display: flex; align-items: center; gap: 22px; padding: 14px 26px; border-bottom: 1px solid var(--hud-linea);
+      background: linear-gradient(180deg, rgba(7, 11, 22, 0.92), rgba(7, 11, 22, 0.6)); position: relative; z-index: 2; }
+    .pm-logo { display: flex; align-items: center; gap: 12px; }
+    .pm-logo svg { width: 42px; height: 42px; }
+    .pm-logo .hex-ext { fill: none; stroke: var(--hud-cian); stroke-width: 4; }
+    .pm-logo .hex-nucleo { fill: var(--hud-ambar); }
+    .pm-titulo { font: 700 24px/1 'Chakra Petch', sans-serif; letter-spacing: 0.22em; text-transform: uppercase; }
+    .pm-sub { margin-top: 4px; font: 500 11px 'Chakra Petch', sans-serif; letter-spacing: 0.24em; text-transform: uppercase; color: var(--hud-cian); }
+    .pm-datos { display: flex; gap: 12px; margin-left: auto; }
+    .pm-dato { min-width: 130px; padding: 8px 14px; border: 1px solid var(--hud-linea); background: rgba(255, 255, 255, 0.03); }
+    .pm-dato span { display: block; font: 600 10px 'Chakra Petch', sans-serif; letter-spacing: 0.2em; text-transform: uppercase; color: rgba(220, 232, 255, 0.55); }
+    .pm-dato b { font: 400 24px 'Share Tech Mono', monospace; color: var(--hud-blanco); }
+    .pm-dato b small { font-size: 15px; color: rgba(220, 232, 255, 0.55); }
+    .pm-dato.oro b { color: var(--hud-ambar); }
+    .pm-dato.verde b { color: #7ee2a8; }
+    .pm-reloj { text-align: right; font: 22px 'Share Tech Mono', monospace; color: var(--hud-cian); }
+    .pm-reloj small { display: block; font: 500 10px 'Chakra Petch', sans-serif; letter-spacing: 0.16em; text-transform: uppercase; color: rgba(220, 232, 255, 0.45); }
+    .pm-btn { display: inline-flex; align-items: center; gap: 8px; padding: 11px 18px; cursor: pointer; border: 1px solid var(--hud-ambar);
+      background: linear-gradient(160deg, rgba(255, 185, 46, 0.18), rgba(255, 185, 46, 0.04)); color: var(--hud-ambar);
+      font: 700 12.5px 'Chakra Petch', sans-serif; letter-spacing: 0.2em; text-transform: uppercase;
+      clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px)); }
+    .pm-btn:hover { background: var(--hud-ambar); color: #1a1100; }
+    .pm-btn svg { width: 18px; height: 18px; fill: currentColor; }
+    .pm-btn.peligro { border-color: var(--hud-magenta); color: var(--hud-magenta); background: linear-gradient(160deg, rgba(255, 61, 127, 0.18), rgba(255, 61, 127, 0.04)); }
+    .pm-btn.peligro:hover { background: var(--hud-magenta); color: #fff; }
+    .pm-btn:disabled { opacity: 0.6; cursor: wait; }
+    .pm-dato.hangar b { color: var(--hud-cian); }
+    .pm-dato[hidden] { display: none; }
+    .flota-vacia small { display: block; margin-top: 12px; font-size: 13px; letter-spacing: 0.12em; color: rgba(220, 232, 255, 0.45); }
+    .modal-botones .btn-mantener .txt { white-space: nowrap; }
+
+    .flota { flex: 1; min-height: 0; position: relative; display: grid; align-content: center; justify-content: center; gap: 14px; padding: 16px 22px 20px; }
+    .flota-vacia { margin: auto; text-align: center; color: rgba(220, 232, 255, 0.6); font: 500 16px 'Chakra Petch', sans-serif; letter-spacing: 0.16em; text-transform: uppercase; }
+
+    /* tarjeta de tripulante */
+    .tj { --borde: rgba(200, 230, 255, 0.28); --brillo: rgba(63, 224, 255, 0.0); position: relative; display: flex; flex-direction: column;
+      background: linear-gradient(170deg, rgba(16, 27, 54, 0.92), rgba(5, 8, 17, 0.95)); border: 1px solid var(--borde);
+      clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px));
+      animation: respirar 5s ease-in-out infinite; animation-delay: var(--retardo, 0s); }
+    @keyframes respirar { 0%, 100% { box-shadow: inset 0 0 0 1px rgba(63, 224, 255, 0.04); } 50% { box-shadow: inset 0 0 18px rgba(63, 224, 255, 0.12); } }
+    .tj.top1 { --borde: #ffcf5a; background: linear-gradient(170deg, rgba(70, 52, 10, 0.95), rgba(14, 10, 3, 0.96)); }
+    .tj.top2 { --borde: #dfe7f2; background: linear-gradient(170deg, rgba(48, 56, 72, 0.95), rgba(10, 12, 18, 0.96)); }
+    .tj.top3 { --borde: #e09a5b; background: linear-gradient(170deg, rgba(64, 34, 14, 0.95), rgba(14, 8, 4, 0.96)); }
+    .tj.top1, .tj.top2, .tj.top3 { border-width: 2px; }
+    .tj-pos { position: absolute; z-index: 3; top: 8px; left: 10px; font: 700 calc(var(--u) * 0.2) 'Chakra Petch', sans-serif; color: rgba(220, 232, 255, 0.55); letter-spacing: 0.04em; }
+    .tj.top1 .tj-pos { color: #ffcf5a; } .tj.top2 .tj-pos { color: #eef3fa; } .tj.top3 .tj-pos { color: #f0ad6e; }
+    .tj-medalla { position: absolute; z-index: 3; top: 6px; right: 10px; font-size: calc(var(--u) * 0.2); filter: drop-shadow(0 0 6px rgba(0, 0, 0, 0.6)); }
+    .tj-retrato { position: relative; flex: 1; min-height: 0; overflow: hidden;
+      background: radial-gradient(circle at 50% 42%, rgba(63, 120, 255, 0.28), transparent 70%); }
+    .tj-retrato img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; object-position: center bottom;
+      animation: flotar var(--dur, 5s) ease-in-out infinite alternate; animation-delay: var(--retardo, 0s); }
+    @keyframes flotar { 0% { transform: translateY(2%) rotate(-1deg); } 100% { transform: translateY(-3%) rotate(1deg); } }
+    .tj-retrato .silueta { position: absolute; inset: 22% 30% 0; border-radius: 40% 40% 8px 8px; background: rgba(200, 230, 255, 0.07); animation: respirar 2s infinite; }
+    .tj-info { flex: none; padding: calc(var(--u) * 0.04) calc(var(--u) * 0.06) calc(var(--u) * 0.05); text-align: center; }
+    .tj-nombre { font: 700 calc(var(--u) * 0.105) 'Chakra Petch', sans-serif; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .tj-rango { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 2px;
+      font: 600 calc(var(--u) * 0.068) 'Chakra Petch', sans-serif; letter-spacing: 0.12em; text-transform: uppercase; color: var(--hud-ambar); white-space: nowrap; }
+    .tj-fila { display: flex; align-items: center; gap: 8px; margin-top: calc(var(--u) * 0.03); }
+    .tj-estrellas { flex: none; font: 400 calc(var(--u) * 0.11) 'Share Tech Mono', monospace; color: var(--hud-ambar); }
+    .tj-barra { flex: 1; display: flex; align-items: center; gap: 2px; }
+    .tj-barra i { flex: 1; height: calc(var(--u) * 0.035); min-height: 4px; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(200, 230, 255, 0.2); transform: skewX(-20deg); }
+    .tj-barra i.ext { height: calc(var(--u) * 0.022); min-height: 3px; border-color: rgba(200, 230, 255, 0.12); }
+    .tj-barra i.sep { flex: none; width: 2px; height: calc(var(--u) * 0.06); background: var(--hud-ambar); border: 0; margin: 0 2px; }
+    .tj-barra i.ll { background: var(--hud-ambar); border-color: var(--hud-ambar); }
+    .tj-barra i.ext.ll { background: var(--hud-cian); border-color: var(--hud-cian); }
+    .tj.cumplido .tj-barra i.ll:not(.ext) { background: #7ee2a8; border-color: #7ee2a8; }
+    .tj-barra i.nuevo { animation: segNuevo 1.2s ease-out; }
+    .tj-mision { position: absolute; z-index: 3; left: 0; right: 0; top: 34%; text-align: center; pointer-events: none; }
+    .tj-mision span { display: inline-block; padding: 3px 8px; background: rgba(5, 8, 17, 0.82); border: 1px solid rgba(63, 224, 255, 0.5);
+      font: 600 calc(var(--u) * 0.055) 'Chakra Petch', sans-serif; letter-spacing: 0.1em; text-transform: uppercase; color: var(--hud-cian); white-space: nowrap; max-width: 92%; overflow: hidden; text-overflow: ellipsis; }
+    .tj-mision span::before { content: '● '; animation: parpadeo 1.2s steps(1) infinite; }
+
+    /* efectos */
+    .tj.nueva { animation: teletransporte 1.4s cubic-bezier(.2, .9, .3, 1) both; }
+    @keyframes teletransporte { 0% { opacity: 0; transform: scaleY(0.02) scaleX(1.15); filter: brightness(4) hue-rotate(-20deg); } 45% { opacity: 1; transform: scaleY(1.05) scaleX(0.96); } 100% { transform: none; filter: none; } }
+    .tj-mas { position: absolute; z-index: 5; left: 0; right: 0; top: 30%; text-align: center; pointer-events: none;
+      font: 700 calc(var(--u) * 0.2) 'Chakra Petch', sans-serif; color: var(--hud-ambar); text-shadow: 0 0 14px rgba(255, 185, 46, 0.9);
+      animation: masEstrellas 1.9s ease-out forwards; }
+    @keyframes masEstrellas { 0% { opacity: 0; transform: translateY(20px) scale(0.6); } 20% { opacity: 1; transform: none; } 100% { opacity: 0; transform: translateY(-60px) scale(1.15); } }
+    .aura { position: absolute; z-index: 4; inset: 0; pointer-events: none; overflow: hidden; }
+    .aura .columna { position: absolute; left: 22%; right: 22%; top: -10%; bottom: 0;
+      background: linear-gradient(0deg, rgba(255, 207, 90, 0.75), rgba(255, 240, 200, 0.35) 45%, rgba(255, 207, 90, 0));
+      filter: blur(6px); animation: columna 3.2s ease-out forwards; transform-origin: bottom; }
+    @keyframes columna { 0% { transform: scaleY(0); opacity: 0; } 15% { opacity: 1; } 35% { transform: scaleY(1); } 100% { transform: scaleY(1); opacity: 0; } }
+    .aura .anillo { position: absolute; left: 50%; top: 58%; width: 30%; aspect-ratio: 1; margin-left: -15%; border: 3px solid rgba(255, 207, 90, 0.9);
+      border-radius: 50%; transform: translateY(-50%) scaleY(0.35); animation: anillo 1.6s ease-out forwards; }
+    .aura .anillo.b { animation-delay: 0.45s; } .aura .anillo.c { animation-delay: 0.9s; }
+    @keyframes anillo { 0% { opacity: 1; transform: translateY(-50%) scale(0.3) scaleY(0.35); } 100% { opacity: 0; transform: translateY(-50%) scale(3) scaleY(0.35); } }
+    .aura .chispa { position: absolute; bottom: 8%; width: 5px; height: 5px; border-radius: 50%; background: #fff4c8; box-shadow: 0 0 8px 2px rgba(255, 207, 90, 0.9);
+      animation: chispa var(--d, 2s) ease-out forwards; animation-delay: var(--r, 0s); opacity: 0; }
+    @keyframes chispa { 0% { opacity: 0; transform: translateY(0); } 15% { opacity: 1; } 100% { opacity: 0; transform: translateY(var(--h, -180px)) translateX(var(--x, 0)); } }
+    .tj.asciende { animation: asciende 3.2s ease-out; }
+    @keyframes asciende { 0%, 100% { box-shadow: none; } 30% { box-shadow: 0 0 40px rgba(255, 207, 90, 0.75), inset 0 0 30px rgba(255, 207, 90, 0.35); } }
+    .tj-banner { position: absolute; z-index: 6; left: 6%; right: 6%; top: 40%; padding: 6px 4px; text-align: center; pointer-events: none;
+      background: linear-gradient(90deg, rgba(255, 185, 46, 0), rgba(255, 185, 46, 0.95) 15%, rgba(255, 185, 46, 0.95) 85%, rgba(255, 185, 46, 0)); color: #1a1100;
+      font: 700 calc(var(--u) * 0.075) 'Chakra Petch', sans-serif; letter-spacing: 0.14em; text-transform: uppercase; animation: banner 3.2s ease-out forwards; }
+    .tj-banner b { display: block; font-size: 1.35em; }
+    @keyframes banner { 0% { opacity: 0; transform: scaleX(0.2); } 15% { opacity: 1; transform: none; } 80% { opacity: 1; } 100% { opacity: 0; transform: translateY(-14px); } }
+    .tj-rango canvas.cambia { animation: girarGalon 0.9s ease-in-out; }
+    @keyframes girarGalon { 0% { transform: rotateY(0) scale(1); } 50% { transform: rotateY(90deg) scale(1.4); } 100% { transform: rotateY(0) scale(1); } }
+    .tj-sello { position: absolute; z-index: 6; left: 50%; top: 22%; padding: 5px 10px; border: 3px solid #7ee2a8; color: #7ee2a8;
+      font: 700 calc(var(--u) * 0.075) 'Chakra Petch', sans-serif; letter-spacing: 0.16em; text-transform: uppercase; background: rgba(5, 20, 12, 0.85);
+      pointer-events: none; animation: sello 3s ease-out forwards; }
+    @keyframes sello { 0% { opacity: 0; transform: translateX(-50%) scale(2.4) rotate(-12deg); } 18% { opacity: 1; transform: translateX(-50%) scale(1) rotate(-8deg); } 80% { opacity: 1; } 100% { opacity: 0; transform: translateX(-50%) scale(1) rotate(-8deg); } }
+
+    /* ceremonia */
+    .cer { position: fixed; inset: 0; z-index: 40; display: flex; flex-direction: column; align-items: center;
+      background: radial-gradient(ellipse at 50% 85%, rgba(255, 185, 46, 0.12), transparent 60%), rgba(3, 5, 12, 0.97); }
+    .cer[hidden] { display: none; }
+    .cer-titulo { margin-top: 3vh; text-align: center; }
+    .cer-titulo h1 { margin: 0; font: 700 clamp(26px, 3.4vw, 54px) 'Chakra Petch', sans-serif; letter-spacing: 0.22em; text-transform: uppercase; color: var(--hud-ambar);
+      text-shadow: 0 0 24px rgba(255, 185, 46, 0.45); }
+    .cer-titulo p { margin: 6px 0 0; font: 500 clamp(12px, 1vw, 16px) 'Chakra Petch', sans-serif; letter-spacing: 0.26em; text-transform: uppercase; color: var(--hud-cian); }
+    /* todo en vh para que el podio quepa en cualquier proyector; los pedestales apoyan en el borde inferior */
+    .cer-podio { flex: 1; min-height: 0; width: min(1400px, 96vw); display: grid; grid-template-columns: 1fr 1.12fr 1fr; align-items: end; gap: 2vw; }
+    .cer-puesto { display: flex; flex-direction: column; align-items: center; opacity: 0; transform: translateY(40px); transition: opacity 0.9s, transform 0.9s; }
+    .cer-puesto.revelado { opacity: 1; transform: none; }
+    .cer-avatar { width: 100%; height: 36vh; position: relative; }
+    .cer-puesto.p1 .cer-avatar { height: 41vh; }
+    .cer-foco { position: absolute; inset: -20% 10% 0; background: radial-gradient(ellipse at 50% 100%, rgba(255, 240, 200, 0.28), transparent 65%); opacity: 0; transition: opacity 1.2s; pointer-events: none; }
+    .cer-puesto.revelado .cer-foco { opacity: 1; }
+    /* altura mínima por puesto (1.º > 2.º > 3.º); si el texto necesita más, el pedestal crece en vez de desbordarse */
+    .cer-pedestal { width: 78%; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding: 2vh 0 1.5vh;
+      border: 2px solid var(--borde); border-bottom: 0; background: linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.02)); }
+    .cer-puesto.p1 .cer-pedestal { --borde: #ffcf5a; min-height: 30vh; }
+    .cer-puesto.p2 .cer-pedestal { --borde: #dfe7f2; min-height: 25vh; }
+    .cer-puesto.p3 .cer-pedestal { --borde: #e09a5b; min-height: 21vh; }
+    .cer-num { font: 700 clamp(24px, 6vh, 60px)/1 'Chakra Petch', sans-serif; color: var(--borde); text-shadow: 0 0 18px rgba(255, 255, 255, 0.2); }
+    .cer-nombre { margin-top: 1vh; font: 700 clamp(14px, 2.6vh, 30px)/1.2 'Chakra Petch', sans-serif; letter-spacing: 0.1em; text-transform: uppercase; text-align: center; }
+    .cer-rango { display: flex; align-items: center; gap: 8px; margin-top: 0.6vh; font: 600 clamp(11px, 1.6vh, 17px)/1.3 'Chakra Petch', sans-serif; letter-spacing: 0.14em; text-transform: uppercase; color: var(--hud-ambar); }
+    .cer-est { margin-top: 0.4vh; font: clamp(13px, 2.2vh, 24px)/1.3 'Share Tech Mono', monospace; color: var(--hud-ambar); }
+    .cer-cerrar { position: absolute; top: 18px; right: 22px; }
+    .cer-confeti { position: absolute; inset: 0; pointer-events: none; }
+    .cer-vacio { grid-column: 1 / -1; align-self: center; text-align: center; font: 600 clamp(16px, 1.6vw, 26px) 'Chakra Petch', sans-serif;
+      letter-spacing: 0.16em; text-transform: uppercase; color: rgba(220, 232, 255, 0.7); }
+    .cer-vacio small { display: block; margin-top: 10px; font-size: 0.6em; letter-spacing: 0.22em; color: var(--hud-cian); }
+  </style>
+</head>
+<body class="puente">
+  <div class="cielo" aria-hidden="true"></div>
+  <header class="pm-cab">
+    <div class="pm-logo">
+      <svg viewBox="0 0 120 120" aria-hidden="true"><polygon class="hex-ext" points="60,8 105,34 105,86 60,112 15,86 15,34"/><polygon class="hex-nucleo" points="60,42 78,60 60,78 42,60"/></svg>
+      <div><div class="pm-titulo">Puente de mando</div><div class="pm-sub" id="pm-sub">Misiones orbitales · Tripulación</div></div>
+    </div>
+    <div class="pm-datos">
+      <div class="pm-dato"><span id="d-trip-etq">Tripulantes</span><b id="d-trip">—</b></div>
+      <div class="pm-dato hangar" id="d-hangar-caja" hidden><span>En el hangar</span><b id="d-hangar">—</b></div>
+      <div class="pm-dato oro"><span>Estrellas de la tripulación</span><b id="d-est">—</b></div>
+      <div class="pm-dato verde"><span>Objetivo cumplido</span><b id="d-obj">—</b></div>
+    </div>
+    <div class="pm-reloj"><span id="reloj">--:--:--</span><small id="actualizado">Conectando…</small></div>
+    <button class="pm-btn" id="btn-campana" type="button" hidden></button>
+  </header>
+  <main class="flota" id="flota"><div class="flota-vacia">Conectando con la tripulación…</div></main>
+
+  <section class="cer" id="cer" hidden aria-label="Ceremonia de condecoración">
+    <canvas class="cer-confeti" id="confeti"></canvas>
+    <button class="pm-btn cer-cerrar" id="btn-cerrar" type="button">Volver al puente</button>
+    <div class="cer-titulo"><h1>Ceremonia de condecoración</h1><p>Misiones orbitales · Mejores tripulantes</p></div>
+    <div class="cer-podio" id="podio"></div>
+  </section>
+
+  <div id="modal" class="modal" hidden>
+    <div class="modal-caja" role="dialog" aria-modal="true">
+      <div id="modal-contenido"></div>
+      <div id="modal-botones" class="modal-botones"></div>
+    </div>
+  </div>
+
+  <div id="cargando" class="carga-accion" hidden role="status" aria-live="polite">
+    <div class="carga-hex"><svg viewBox="0 0 120 120" aria-hidden="true">
+      <polygon class="hex-ext" points="60,8 105,34 105,86 60,112 15,86 15,34"/>
+      <polygon class="hex-int" points="60,26 89.4,43 89.4,77 60,94 30.6,77 30.6,43"/>
+      <polygon class="hex-nucleo" points="60,48 72,60 60,72 48,60"/>
+    </svg></div>
+    <div class="carga-accion-tit"></div>
+    <div class="carga-accion-sub"></div>
+    <div class="carga-barra"><span></span></div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <?!= include('Avatar'); ?>
+  <script>
+  /* =====================================================================
+   * Puente de mando: tarjetas de la tripulación ordenadas por estrellas
+   * (desempate: quien llegó antes), con efectos al ganar estrellas y ascender.
+   * ===================================================================== */
+  const $ = s => document.querySelector(s);
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const llamar = (fn, ...args) => new Promise((ok, mal) => google.script.run.withSuccessHandler(ok).withFailureHandler(mal)[fn](...args));
+  const CADA = 12000;                                      // sondeo del servidor (ms)
+  const P = { datos: null, previo: new Map(), fotos: new Map(), tarjetas: new Map(), cola: [], ultima: 0 };
+
+  const nivelRango = e => { let k = 0; P.datos.rangos.forEach((r, i) => { if (e >= r.min) k = i; }); return k; };
+  function lienzoGalon(nivel, w, h, clase) {
+    const k = Math.min(window.devicePixelRatio || 1, 2);
+    const cv = document.createElement('canvas');
+    cv.width = Math.round(w * k); cv.height = Math.round(h * k);
+    cv.style.width = w + 'px'; cv.style.height = h + 'px';
+    if (clase) cv.className = clase;
+    dibujarGalon(cv.getContext('2d'), nivel, cv.width, cv.height);
+    return cv;
+  }
+  const ordenar = lista => lista.slice().sort((a, b) =>
+    b.estrellas - a.estrellas || (a.estrellas ? (a.hora || Infinity) - (b.hora || Infinity) : 0) || a.indicativo.localeCompare(b.indicativo, 'es'));
+
+  /* ---------------------- retratos (un renderizador) ---------------------- */
+  // cola de fotos: se hacen de una en una para no bloquear la animación
+  const pendientes = [];
+  function pedirFoto(t, nivel, alListo) {
+    const clave = t.id + '|' + nivel;
+    if (P.fotos.has(clave)) { alListo(P.fotos.get(clave)); return; }
+    pendientes.push({ t, nivel, clave, alListo });
+    if (pendientes.length === 1) setTimeout(fotografiarSiguiente, 0);
+  }
+  function fotografiarSiguiente() {
+    const p = pendientes.shift();
+    if (!p) return;
+    const url = fotografiarAvatar(p.t.avatar, p.nivel, p.t.indicativo, 300, 300, 'busto');
+    P.fotos.set(p.clave, url);
+    p.alListo(url);
+    if (pendientes.length) setTimeout(fotografiarSiguiente, 15);       // de una en una, sin bloquear la página
+  }
+
+  /* ----------------------------- disposición ----------------------------- */
+  // columnas y tamaño para que quepan todas las tarjetas sin desplazamiento
+  function disponer(n) {
+    const flota = $('#flota');
+    const W = flota.clientWidth - 44, H = flota.clientHeight - 36, gap = 14, prop = 1.32;   // alto / ancho de una tarjeta
+    let mejor = { c: 1, w: 0 };
+    for (let c = 1; c <= Math.max(1, n); c++) {
+      const f = Math.ceil(n / c);
+      const w = Math.min((W - gap * (c - 1)) / c, (H - gap * (f - 1)) / f / prop);
+      if (w > mejor.w) mejor = { c, w };
+    }
+    const w = Math.min(mejor.w, 300);
+    flota.style.gridTemplateColumns = `repeat(${mejor.c}, ${Math.floor(w)}px)`;
+    flota.style.gridAutoRows = Math.floor(w * prop) + 'px';
+    flota.style.setProperty('--u', Math.floor(w) + 'px');
+  }
+
+  function crearTarjeta(t) {
+    const el = document.createElement('article');
+    el.className = 'tj';
+    el.dataset.id = t.id;
+    el.style.setProperty('--retardo', (-Math.random() * 5).toFixed(2) + 's');
+    el.style.setProperty('--dur', (4 + Math.random() * 2.5).toFixed(2) + 's');
+    el.innerHTML = `<div class="tj-pos"></div><div class="tj-medalla"></div>
+      <div class="tj-retrato"><div class="silueta"></div></div>
+      <div class="tj-mision" hidden><span></span></div>
+      <div class="tj-info"><div class="tj-nombre"></div><div class="tj-rango"></div>
+        <div class="tj-fila"><div class="tj-estrellas"></div><div class="tj-barra"></div></div></div>`;
+    return el;
+  }
+
+  function pintarTarjeta(el, t, pos, nuevas) {
+    const d = P.datos, nivel = nivelRango(t.estrellas);
+    el.classList.remove('top1', 'top2', 'top3');
+    if (pos <= 3 && t.estrellas > 0) el.classList.add('top' + pos);
+    el.classList.toggle('cumplido', t.estrellas >= d.objetivo);
+    el.querySelector('.tj-pos').textContent = '#' + pos;
+    el.querySelector('.tj-medalla').textContent = t.estrellas > 0 ? ({ 1: '🥇', 2: '🥈', 3: '🥉' }[pos] || '') : '';
+    el.querySelector('.tj-nombre').textContent = t.indicativo;
+    const u = parseFloat(getComputedStyle($('#flota')).getPropertyValue('--u')) || 200;
+    const rg = el.querySelector('.tj-rango');
+    if (Number(rg.dataset.nivel) !== nivel || rg.dataset.u !== String(u)) {
+      rg.innerHTML = '';
+      rg.appendChild(lienzoGalon(nivel, Math.round(u * 0.075), Math.round(u * 0.09)));
+      rg.appendChild(document.createTextNode(d.rangos[nivel].n));
+      rg.dataset.nivel = nivel; rg.dataset.u = u;
+    }
+    el.querySelector('.tj-estrellas').textContent = t.estrellas + ' ★';
+    const barra = el.querySelector('.tj-barra');
+    let html = '';
+    for (let i = 0; i < d.total; i++) {
+      if (i === d.objetivo) html += '<i class="sep"></i>';
+      html += `<i class="${i >= d.objetivo ? 'ext' : ''} ${i < t.estrellas ? 'll' : ''} ${nuevas && i >= t.estrellas - nuevas && i < t.estrellas ? 'nuevo' : ''}"></i>`;
+    }
+    barra.innerHTML = html;
+    const mis = el.querySelector('.tj-mision');
+    mis.hidden = !t.enCurso;
+    if (t.enCurso) mis.querySelector('span').textContent = 'En misión · ' + t.enCurso;
+    // retrato (con el galón de su rango en los hombros)
+    const ret = el.querySelector('.tj-retrato');
+    if (ret.dataset.nivel !== String(nivel)) {
+      ret.dataset.nivel = nivel;
+      pedirFoto(t, nivel, url => {
+        if (!url) return;
+        let img = ret.querySelector('img');
+        if (!img) { img = document.createElement('img'); img.alt = ''; ret.innerHTML = ''; ret.appendChild(img); }
+        img.src = url;
+      });
+    }
+  }
+
+  /* ------------------------------- efectos ------------------------------- */
+  function efectoEstrellas(el, n) {
+    const m = document.createElement('div');
+    m.className = 'tj-mas';
+    m.textContent = '+' + n + ' ★';
+    el.appendChild(m);
+    setTimeout(() => m.remove(), 2000);
+  }
+  function efectoAscenso(el, nombreRango) {
+    const aura = document.createElement('div');
+    aura.className = 'aura';
+    let chispas = '';
+    for (let i = 0; i < 18; i++) {
+      chispas += `<span class="chispa" style="left:${10 + Math.random() * 80}%;--d:${(1.4 + Math.random() * 1.4).toFixed(2)}s;--r:${(Math.random() * 1.4).toFixed(2)}s;--h:${-(120 + Math.random() * 160).toFixed(0)}px;--x:${((Math.random() - 0.5) * 40).toFixed(0)}px"></span>`;
+    }
+    aura.innerHTML = `<div class="columna"></div><div class="anillo"></div><div class="anillo b"></div><div class="anillo c"></div>${chispas}`;
+    el.appendChild(aura);
+    const b = document.createElement('div');
+    b.className = 'tj-banner';
+    b.innerHTML = `¡Ascenso!<b>${esc(nombreRango)}</b>`;
+    el.appendChild(b);
+    el.classList.remove('asciende'); void el.offsetWidth; el.classList.add('asciende');
+    const cv = el.querySelector('.tj-rango canvas');
+    if (cv) cv.classList.add('cambia');
+    setTimeout(() => { aura.remove(); b.remove(); el.classList.remove('asciende'); }, 3300);
+  }
+  function efectoObjetivo(el) {
+    const s = document.createElement('div');
+    s.className = 'tj-sello';
+    s.textContent = 'Objetivo ✓';
+    el.appendChild(s);
+    setTimeout(() => s.remove(), 3100);
+  }
+  // los efectos se escalonan para que dé tiempo a verlos todos
+  function encolar(fn) {
+    const ahora = performance.now(), cuando = Math.max(ahora, P.ultima + 900);
+    P.ultima = cuando;
+    setTimeout(fn, cuando - ahora);
+  }
+
+  /* ------------------------------ actualizar ------------------------------ */
+  function aplicar(datos) {
+    const primera = !P.datos;
+    P.datos = datos;
+    const lista = ordenar(datos.tripulantes);
+    const flota = $('#flota');
+    // cabecera
+    const total = lista.reduce((n, t) => n + t.estrellas, 0), cumplen = lista.filter(t => t.estrellas >= datos.objetivo).length;
+    $('#d-trip').textContent = lista.length;
+    $('#d-est').textContent = total;
+    $('#d-obj').innerHTML = `${cumplen}<small> / ${lista.length}</small>`;
+    $('#actualizado').textContent = 'Actualizado ' + new Date().toLocaleTimeString('es-ES', { hour12: false });
+    pintarCampana(datos);
+    if (!lista.length) {
+      P.tarjetas.forEach(el => el.remove()); P.tarjetas.clear();
+      flota.innerHTML = `<div class="flota-vacia">${VACIA[datos.campana.estado] || VACIA.curso}</div>`;
+      return;
+    }
+    flota.querySelector('.flota-vacia')?.remove();
+    disponer(lista.length);
+    // FLIP: posiciones antes de reordenar
+    const antes = new Map();
+    P.tarjetas.forEach((el, id) => antes.set(id, el.getBoundingClientRect()));
+    lista.forEach((t, i) => {
+      let el = P.tarjetas.get(t.id), nueva = false;
+      if (!el) { el = crearTarjeta(t); P.tarjetas.set(t.id, el); nueva = true; }
+      flota.appendChild(el);                                  // en el orden nuevo
+      const prev = P.previo.get(t.id);
+      const ganadas = prev ? Math.max(0, t.estrellas - prev.estrellas) : 0;
+      pintarTarjeta(el, t, i + 1, primera ? 0 : ganadas);
+      if (primera) return;
+      if (nueva) { el.classList.add('nueva'); setTimeout(() => el.classList.remove('nueva'), 1500); return; }
+      if (ganadas) encolar(() => efectoEstrellas(el, ganadas));
+      if (prev && nivelRango(t.estrellas) > nivelRango(prev.estrellas)) encolar(() => efectoAscenso(el, datos.rangos[nivelRango(t.estrellas)].n));
+      if (prev && prev.estrellas < datos.objetivo && t.estrellas >= datos.objetivo) encolar(() => efectoObjetivo(el));
+    });
+    // quien ya no aparece (p. ej., el profesor borró su avatar)
+    P.tarjetas.forEach((el, id) => { if (!lista.some(t => t.id === id)) { el.remove(); P.tarjetas.delete(id); } });
+    // FLIP: deslizar desde la posición anterior
+    lista.forEach(t => {
+      const el = P.tarjetas.get(t.id), a = antes.get(t.id);
+      if (!a || primera) return;
+      const b = el.getBoundingClientRect(), dx = a.left - b.left, dy = a.top - b.top;
+      if (Math.abs(dx) + Math.abs(dy) > 2) el.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'none' }], { duration: 900, easing: 'cubic-bezier(.2,.8,.2,1)' });
+    });
+    P.previo = new Map(lista.map(t => [t.id, { estrellas: t.estrellas }]));
+  }
+
+  // sondeo: más rápido con el hangar abierto (se ve llegar a la tripulación) y lento con la campaña terminada
+  async function sondear() {
+    clearTimeout(P.sondeo);
+    try { aplicar(await llamar('getTripulacion')); }
+    catch (err) { $('#actualizado').textContent = 'Sin conexión: reintentando…'; }
+    const estado = P.datos ? P.datos.campana.estado : 'curso';
+    P.sondeo = setTimeout(sondear, estado === 'hangar' ? CADA / 2 : estado === 'finalizada' ? CADA * 2.5 : CADA);
+  }
+
+  /* -------------------------------- campaña -------------------------------- */
+  // el mismo botón avanza la campaña: abrir hangar → iniciar → terminar → ceremonia
+  const ICONOS_CAMPANA = {
+    cerrada: '<path d="M3 21V9.5L12 3l9 6.5V21h-2.5v-9h-13v9zm5-7.5h8v2H8zm0 3.5h8v2H8z"/>',
+    hangar: '<path d="M12 2c3 2.5 4.5 6 4.5 10l-2 3h-5l-2-3c0-4 1.5-7.5 4.5-10zm0 6.3a1.7 1.7 0 1 0 0 3.4 1.7 1.7 0 0 0 0-3.4zM8.6 16l-2.6 4.2 3.6-1zm6.8 0l2.6 4.2-3.6-1zM11 17h2v4.5h-2z"/>',
+    curso: '<path d="M6 6h12v12H6z"/>',
+    finalizada: '<path d="M5 21h14v-2H5zm2-3h3v-6H7zm4 0h3V8h-3zm4 0h3v-4h-3z"/>'
+  };
+  const CAMPANA = {
+    cerrada: { boton: 'Abrir hangar', sub: 'Campaña no iniciada', destino: 'hangar', titulo: '¿Abrir el hangar?',
+      carga: ['Abriendo el hangar', 'Avisando a la tripulación'],
+      texto: () => '<p>La tripulación podrá <b>diseñar su astronauta</b> y elegir su indicativo. Las misiones seguirán cerradas hasta que inicies la campaña.</p>' },
+    hangar: { boton: 'Iniciar campaña', sub: 'Hangar abierto', destino: 'curso', titulo: '¿Iniciar la campaña?',
+      carga: ['Iniciando la campaña', 'Preparando la cuenta atrás'],
+      texto: d => `<p>Empezará una <b>cuenta atrás de 10 s</b> en todas las pantallas y se abrirán las misiones.</p>` +
+        (d.enHangar ? `<p><b>${d.enHangar}</b> ${d.enHangar === 1 ? 'tripulante sigue' : 'tripulantes siguen'} en el hangar: podrán terminar su astronauta, pero ya con el reloj en marcha.</p>` : '') },
+    curso: { boton: 'Terminar campaña', sub: 'Campaña en curso', destino: 'finalizada', titulo: '¿Terminar la campaña?', mantener: true, peligro: true,
+      carga: ['Terminando la campaña', 'Cerrando los envíos'],
+      texto: () => '<p>Se dejarán de aceptar envíos y <b>las misiones a medias no contarán</b>. Cada tripulante verá su informe final.</p><div class="modal-aviso">No se puede deshacer desde el puente.</div>' },
+    finalizada: { boton: 'Ceremonia', sub: 'Campaña finalizada' }
+  };
+  const VACIA = {
+    cerrada: 'Campaña no iniciada<small>Pulsa «Abrir hangar» para que la tripulación diseñe su astronauta</small>',
+    hangar: 'Hangar abierto<small>Esperando a la tripulación…</small>',
+    curso: 'Esperando a la tripulación…',
+    finalizada: 'Campaña finalizada<small>Nadie llegó a unirse a la tripulación</small>'
+  };
+
+  function pintarCampana(d) {
+    const c = d.campana, cfg = CAMPANA[c.estado], btn = $('#btn-campana');
+    if (btn.dataset.estado !== c.estado) {
+      btn.dataset.estado = c.estado;
+      btn.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONOS_CAMPANA[c.estado]}</svg>${cfg.boton}`;
+      btn.classList.toggle('peligro', !!cfg.peligro);
+      btn.hidden = false;
+      if (c.estado !== 'finalizada' && !$('#cer').hidden) cerrarCeremonia();
+    }
+    $('#pm-sub').textContent = 'Misiones orbitales · ' + cfg.sub;
+    const enHangar = c.estado === 'hangar';
+    $('#d-trip-etq').textContent = enHangar ? 'Listos' : 'Tripulantes';
+    $('#d-hangar-caja').hidden = !enHangar;
+    $('#d-hangar').textContent = d.enHangar;
+    // la cuenta atrás también se proyecta (aunque el puente se abra en mitad de ella)
+    if (c.estado === 'curso' && c.faltan > 400 && !P.cuenta) { P.cuenta = true; cuentaAtras(c.faltan); }
+    if (c.estado !== 'curso') P.cuenta = false;              // si se reanuda tras volver al hangar, se vuelve a proyectar
+  }
+
+  async function botonCampana() {
+    const btn = $('#btn-campana'), d = P.datos;
+    if (!d || btn.disabled) return;
+    const c = d.campana.estado, cfg = CAMPANA[c];
+    if (c === 'finalizada') return abrirCeremonia();
+    if (!await confirmar(cfg.titulo, cfg.texto(d), cfg.boton, cfg.mantener)) return;
+    btn.disabled = true;
+    const carga = $('#cargando');
+    carga.querySelector('.carga-accion-tit').textContent = cfg.carga[0];
+    carga.querySelector('.carga-accion-sub').textContent = cfg.carga[1];
+    carga.hidden = false;
+    try {
+      const datos = await llamar('cambiarCampana', cfg.destino);
+      carga.hidden = true;                                   // antes de pintar: la cuenta atrás va justo después
+      aplicar(datos);
+    }
+    catch (err) { $('#actualizado').textContent = 'No se pudo cambiar: ' + (err.message || err); }
+    carga.hidden = true;
+    btn.disabled = false;
+  }
+
+  /** Confirmación del profesor; las acciones irreversibles se confirman manteniendo pulsado. */
+  function confirmar(titulo, html, textoSi, mantener) {
+    return new Promise(res => {
+      const m = $('#modal');
+      $('#modal-contenido').innerHTML = `<div class="modal-kicker">Control de campaña</div><h2>${titulo}</h2>${html}`;
+      const zona = $('#modal-botones');
+      zona.innerHTML = '';
+      const tecla = e => { if (e.key === 'Escape') cerrar(false); };
+      const cerrar = v => { m.hidden = true; document.removeEventListener('keydown', tecla); res(v); };
+      document.addEventListener('keydown', tecla);
+      const no = document.createElement('button');
+      no.type = 'button'; no.className = 'btn-hud'; no.textContent = 'Cancelar';
+      no.onclick = () => cerrar(false);
+      const si = document.createElement('button');
+      si.type = 'button';
+      if (mantener) {
+        si.className = 'btn-hud btn-mantener';
+        si.innerHTML = `<span class="relleno"></span><span class="txt">Mantén para terminar</span>`;
+        botonMantener(si, 1200, () => setTimeout(() => cerrar(true), 150));
+      } else {
+        si.className = 'btn-hud principal'; si.textContent = textoSi;
+        si.onclick = () => cerrar(true);
+      }
+      zona.append(no, si);
+      m.hidden = false;
+      si.focus();
+    });
+  }
+
+  function botonMantener(boton, ms, alCompletar) {
+    const relleno = boton.querySelector('.relleno');
+    let t0 = null, raf = null;
+    const pintar = p => { relleno.style.width = (p * 100) + '%'; boton.classList.toggle('activo', p > 0.5); };
+    const paso = ahora => {
+      if (t0 === null) return;                               // ya se soltó
+      const p = Math.min(1, (ahora - t0) / ms);
+      pintar(p);
+      if (p >= 1) { t0 = null; boton.classList.add('hecho'); alCompletar(); } else raf = requestAnimationFrame(paso);
+    };
+    const empezar = e => {
+      if (t0 !== null || boton.classList.contains('hecho')) return;
+      if (e.type === 'keydown' && ((e.key !== ' ' && e.key !== 'Enter') || e.repeat)) return;
+      if (e.type === 'pointerdown' && e.button !== 0) return;
+      e.preventDefault();
+      t0 = performance.now(); raf = requestAnimationFrame(paso);
+    };
+    const soltar = () => { if (t0 === null) return; cancelAnimationFrame(raf); t0 = null; pintar(0); };
+    boton.addEventListener('pointerdown', empezar);
+    boton.addEventListener('keydown', empezar);
+    ['pointerup', 'pointerleave', 'pointercancel', 'keyup', 'blur'].forEach(ev => boton.addEventListener(ev, soltar));
+  }
+
+  /** Cuenta atrás a pantalla completa (la misma que ven los alumnos). */
+  function cuentaAtras(ms) {
+    const el = document.createElement('div');
+    el.className = 'cuenta';
+    el.innerHTML = '<div class="cuenta-kicker">Campaña iniciada · Despegue en</div><div class="cuenta-num"></div><div class="cuenta-pie">Las misiones se abren al llegar a cero</div>';
+    document.body.appendChild(el);
+    const num = el.querySelector('.cuenta-num'), fin = Date.now() + ms;
+    let previo = null;
+    (function paso() {
+      const s = Math.ceil((fin - Date.now()) / 1000);
+      if (s <= 0) { num.textContent = '¡Despegue!'; el.classList.add('fin'); setTimeout(() => el.remove(), 1100); return; }
+      if (s !== previo) { previo = s; num.textContent = s; num.classList.remove('late'); void num.offsetWidth; num.classList.add('late'); }
+      setTimeout(paso, 80);
+    })();
+  }
+
+  /* ------------------------------- ceremonia ------------------------------- */
+  const C = { avatares: [], timers: [], confeti: null };
+  function abrirCeremonia() {
+    if (!P.datos) return;
+    const top = ordenar(P.datos.tripulantes).filter(t => t.estrellas > 0).slice(0, 3);
+    const podio = $('#podio');
+    if (!top.length) {
+      podio.innerHTML = '<div class="cer-vacio">Nadie ha conseguido estrellas en esta campaña<small>No hay tripulantes que condecorar</small></div>';
+      $('#cer').hidden = false;
+      return;
+    }
+    // orden visual: 2.º, 1.º, 3.º
+    const huecos = [[top[1], 2], [top[0], 1], [top[2], 3]];
+    podio.innerHTML = huecos.map(([t, p]) => t ? `
+      <div class="cer-puesto p${p}" data-p="${p}">
+        <div class="cer-avatar"><div class="cer-foco"></div></div>
+        <div class="cer-pedestal"><div class="cer-num">${p}</div>
+          <div class="cer-nombre">${esc(t.indicativo)}</div><div class="cer-rango"></div><div class="cer-est">${t.estrellas} ★</div></div>
+      </div>` : '<div></div>').join('');
+    $('#cer').hidden = false;
+    huecos.forEach(([t, p]) => {
+      if (!t) return;
+      const puesto = podio.querySelector(`[data-p="${p}"]`);
+      const nivel = nivelRango(t.estrellas);
+      puesto.querySelector('.cer-rango').append(lienzoGalon(nivel, 20, 24), document.createTextNode(P.datos.rangos[nivel].n));
+      C.avatares.push(crearAvatar(puesto.querySelector('.cer-avatar'), t.avatar, { plataforma: true, galon: nivel, nombre: t.indicativo,
+        camara: { pos: [0, 1.95, 8.2], mira: [0, 1.62, 0] } }));
+    });
+    // revelación: tercero, segundo y primero (con confeti)
+    [[3, 1200], [2, 3600], [1, 6200]].forEach(([p, ms]) => C.timers.push(setTimeout(() => {
+      const el = podio.querySelector(`[data-p="${p}"]`);
+      if (el) el.classList.add('revelado');
+      if (p === 1) confeti();
+    }, ms)));
+  }
+  function cerrarCeremonia() {
+    C.timers.forEach(clearTimeout); C.timers = [];
+    C.avatares.forEach(a => a.destruir()); C.avatares = [];
+    C.confeti = null;
+    $('#cer').hidden = true;
+    $('#podio').innerHTML = '';
+  }
+  function confeti() {
+    const cv = $('#confeti'), ctx = cv.getContext('2d');
+    cv.width = innerWidth; cv.height = innerHeight;
+    const colores = ['#ffcf5a', '#3fe0ff', '#ff3d7f', '#7ee2a8', '#ffffff'];
+    const piezas = Array.from({ length: 220 }, () => ({ x: Math.random() * cv.width, y: -20 - Math.random() * cv.height * 0.6,
+      vx: (Math.random() - 0.5) * 2, vy: 2 + Math.random() * 3, r: Math.random() * Math.PI, vr: (Math.random() - 0.5) * 0.3,
+      w: 6 + Math.random() * 6, h: 3 + Math.random() * 4, c: colores[Math.floor(Math.random() * colores.length)] }));
+    const id = {}; C.confeti = id;
+    const t0 = performance.now();
+    (function paso(ahora) {
+      if (C.confeti !== id) { ctx.clearRect(0, 0, cv.width, cv.height); return; }
+      ctx.clearRect(0, 0, cv.width, cv.height);
+      piezas.forEach(p => {
+        p.x += p.vx; p.y += p.vy; p.r += p.vr;
+        ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r); ctx.fillStyle = p.c; ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h); ctx.restore();
+      });
+      if (ahora - t0 < 7000) requestAnimationFrame(paso); else ctx.clearRect(0, 0, cv.width, cv.height);
+    })(t0);
+  }
+  $('#btn-campana').addEventListener('click', botonCampana);
+  $('#btn-cerrar').addEventListener('click', cerrarCeremonia);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#cer').hidden) cerrarCeremonia(); });
+
+  /* ------------------------------- arranque ------------------------------- */
+  setInterval(() => { $('#reloj').textContent = new Date().toLocaleTimeString('es-ES', { hour12: false }); }, 1000);
+  window.addEventListener('resize', () => { if (P.datos && P.tarjetas.size) aplicar(P.datos); });
+  sondear();
+  </script>
+</body>
+</html>

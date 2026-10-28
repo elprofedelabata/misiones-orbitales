@@ -1,0 +1,12 @@
+# Configuración local de clasp: identifica TU proyecto de Apps Script (cada profesor crea el suyo)
+.clasp.json
+.clasp-*.json
+
+# Simulación local para pruebas y ajustes del editor
+.preview/
+.claude/
+node_modules/
+
+# Borradores y herramientas de la guía (con rutas de este equipo)
+guia/*borrador*.pdf
+guia/herramientas/

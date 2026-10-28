@@ -1,0 +1,479 @@
+<style>
+  /* =================================================================
+   * Misión «Tráfico orbital»: radar con tres satélites y corrección Δv
+   * (reutiliza los estilos de la consola de «Ascenso orbital»)
+   * ================================================================= */
+  .vista-radar { top: 16px; left: 20px; }
+  .vista-radar .fase { font: 600 13px 'Chakra Petch', sans-serif; letter-spacing: 0.18em; text-transform: uppercase; color: var(--hud-ambar); }
+  .ficha-sat { position: absolute; z-index: 3; left: 16px; bottom: 16px; width: 250px; padding: 10px 12px 12px;
+    background: rgba(5, 8, 17, 0.88); border: 1px solid var(--hud-linea-fuerte); }
+  .ficha-sat .pestanas { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-bottom: 8px; }
+  .ficha-sat .pestanas button { height: 26px; border: 1px solid var(--hud-linea-fuerte); background: rgba(255,255,255,0.04); color: var(--hud-blanco); cursor: pointer;
+    font: 600 10.5px 'Chakra Petch', sans-serif; letter-spacing: 0.08em; white-space: nowrap; }
+  .ficha-sat .pestanas button.activa { border-color: var(--hud-cian); color: var(--hud-cian); background: rgba(63,224,255,0.12); }
+  .ficha-sat .pestanas button.marcado { box-shadow: inset 0 -2px 0 var(--hud-ambar); }
+  .ficha-sat dl { margin: 0 0 8px; display: grid; grid-template-columns: auto 1fr; font: 12.5px 'Share Tech Mono', monospace; }
+  .ficha-sat dt, .ficha-sat dd { margin: 0; padding: 3px 0; border-bottom: 1px solid rgba(200,230,255,0.08); }
+  .ficha-sat dt { color: rgba(220,235,255,0.55); padding-right: 10px; }
+  .ficha-sat dd { text-align: right; color: var(--hud-blanco); }
+  .ficha-sat .btn-marcar { width: 100%; height: 32px; border: 1px solid var(--hud-ambar); background: rgba(255,185,46,0.08); color: var(--hud-ambar); cursor: pointer;
+    font: 700 11px 'Chakra Petch', sans-serif; letter-spacing: 0.12em; text-transform: uppercase; }
+  .ficha-sat .btn-marcar:hover { background: rgba(255,185,46,0.22); }
+  .ficha-sat .btn-marcar.hecho { background: var(--hud-ambar); color: #1a1100; }
+  #lienzo-radar { cursor: pointer; }
+  .vista-radar ~ .vista-telemetria { top: 132px; }
+</style>
+<script>
+/* =====================================================================
+ * Misión «Tráfico orbital»: tres satélites; uno no lleva la velocidad de su
+ * órbita circular. El alumno lo identifica y calcula la corrección Δv.
+ * ===================================================================== */
+
+const ANGULOS_SAT = [0.32 * Math.PI, 1.02 * Math.PI, 1.62 * Math.PI];
+
+function pantallaTrafico(m) {
+  limpiarVista();
+  E.mision = m;
+  document.body.classList.add('vista-consola');
+  const s = m.escena;
+  const claveP = 'prediccion-' + m.id, claveD = 'destino-' + m.id;
+  let prediccion = null, marcado = null;
+  try {
+    prediccion = sessionStorage.getItem(claveP);
+    const d = sessionStorage.getItem(claveD);
+    marcado = d === null ? null : Number(d);
+  } catch (e) { /* sin almacenamiento */ }
+
+  app.innerHTML = `
+    <section class="consola">
+      <header class="consola-cab">
+        <span class="consola-icono">${iconoMision(m)}</span>
+        <div>
+          <div class="consola-kicker">MSN-${m.id} · Control de tráfico · ${esc(s.planeta)}</div>
+          <h1>${esc(m.titulo)}</h1>
+        </div>
+        <span class="dificultad">${dificultad(m.estrellas)}</span>
+        <span class="en-curso">🔒 Misión en curso · no se puede abandonar</span>
+      </header>
+      <div class="consola-cuerpo">
+        <div class="consola-vista" id="vista">
+          <div class="esquinas"><span></span></div>
+          <div class="vista-hud vista-radar">
+            <div class="fase" id="fase">Radar · captura actual</div>
+            <div class="hud-nombre">Constelación de ${esc(s.planeta)}</div>
+            <div class="hud-dato">MASA DEL PLANETA <b>${formatoNum(s.M)} kg</b></div>
+            <div class="hud-dato">RADIO DEL PLANETA <b>${formatoNum(s.R)} m</b></div>
+            <div class="hud-dato">G <b>${formatoNum(s.G)} N·m²/kg²</b></div>
+          </div>
+          <div class="vista-hud vista-telemetria" id="telemetria" hidden></div>
+          <div class="vista-hud vista-mensaje" id="mensaje"></div>
+        </div>
+        <aside class="consola-lateral" id="lateral">
+          <div class="bloque-hud orden">
+            <div class="bloque-hud-tit">Orden de Control de Misión</div>
+            <p>${esc(m.historia)}</p>
+          </div>
+          <div class="bloque-hud paso-hud">
+            <div class="bloque-hud-tit"><span>01</span> Predicción</div>
+            <p class="orden" style="margin:0 0 8px;font-size:14px;color:rgba(225,235,255,.85)">Un satélite que va más rápido de lo que corresponde a su órbita circular…</p>
+            <div class="predicciones">
+              <button type="button" class="prediccion" data-p="mayor">Se aleja</button>
+              <button type="button" class="prediccion" data-p="igual">Sigue igual</button>
+              <button type="button" class="prediccion" data-p="menor">Se acerca</button>
+            </div>
+            <p class="paso-nota">No puntúa: lo comprobarás al final.</p>
+          </div>
+          <div class="bloque-hud paso-hud">
+            <div class="bloque-hud-tit"><span>02</span> Satélite anómalo</div>
+            <div class="destino-estado" id="marcado-estado"></div>
+          </div>
+          <div class="bloque-hud paso-hud" id="paso-maniobra">
+            <div class="bloque-hud-tit"><span>03</span> Corrección de velocidad</div>
+            <div class="maniobra-entrada">
+              <span class="simbolo">Δv =</span>
+              <input class="in-mantisa" id="m0" inputmode="decimal" placeholder="mantisa" aria-label="Mantisa">
+              <span class="por-diez">·10^</span>
+              <input class="in-exp" id="e0" inputmode="numeric" placeholder="exp" aria-label="Exponente">
+              <span class="unidad">m/s</span>
+            </div>
+            <div class="maniobra-previa" id="previa">Positivo para acelerar, negativo para frenar.</div>
+            <button id="btn-ejecutar" class="btn-hud btn-mantener" type="button" aria-label="Mantén pulsado para corregir la órbita">
+              <span class="relleno"></span>
+              <svg class="icono" viewBox="0 0 20 20" aria-hidden="true"><polygon points="10,1 19,10 10,19 1,10" fill="none" stroke="currentColor" stroke-width="2"/><polygon points="10,6 14,10 10,14 6,10" fill="currentColor"/></svg>
+              <span class="txt">Mantén para corregir</span>
+            </button>
+          </div>
+        </aside>
+      </div>
+    </section>`;
+
+  const pasoManiobra = $('#paso-maniobra');
+  const marcar = () => {
+    app.querySelectorAll('.prediccion').forEach(b => b.classList.toggle('activa', b.dataset.p === prediccion));
+    const est = $('#marcado-estado');
+    est.classList.toggle('ok', marcado !== null);
+    est.innerHTML = marcado !== null
+      ? `<span class="rombo"></span><span><b>${esc(s.sats[marcado].nombre)}</b> · marcado como anómalo</span>`
+      : '<span class="rombo"></span><span>Sin marcar: elige uno en el radar.</span>';
+    pasoManiobra.classList.toggle('bloqueado', !prediccion || marcado === null);
+  };
+
+  E.sim = crearRadar($('#vista'), s, marcado, i => {
+    marcado = i;
+    try { sessionStorage.setItem(claveD, String(i)); } catch (e) { /* sin almacenamiento */ }
+    marcar();
+  });
+
+  app.querySelectorAll('.prediccion').forEach(b => b.addEventListener('click', () => {
+    prediccion = b.dataset.p;
+    try { sessionStorage.setItem(claveP, prediccion); } catch (e) { /* sin almacenamiento */ }
+    marcar();
+  }));
+  marcar();
+
+  // vista previa del número
+  const previa = $('#previa');
+  const textoPrevia = 'Positivo para acelerar, negativo para frenar.';
+  const actualizarPrevia = () => {
+    const v = leerNumeroCliente($('#m0').value, $('#e0').value);
+    if (!$('#m0').value.trim() && !$('#e0').value.trim()) { previa.textContent = textoPrevia; previa.classList.remove('error'); return null; }
+    if (v === null) { previa.textContent = 'Formato no válido'; previa.classList.add('error'); return null; }
+    previa.classList.remove('error');
+    previa.textContent = 'Δv = ' + formatoNum(v, 4) + ' m/s · ' + (v > 0 ? 'acelerar' : v < 0 ? 'frenar' : 'sin cambio');
+    return v;
+  };
+  ['#m0', '#e0'].forEach(sel => $(sel).addEventListener('input', actualizarPrevia));
+
+  // corregir (mantener pulsado): entrega, simulación e informe
+  const boton = $('#btn-ejecutar'), txt = boton.querySelector('.txt');
+  const mantener = botonMantener(boton, 900, async () => {
+    const valor = actualizarPrevia();
+    if (valor === null) {
+      aviso('Escribe la corrección en notación científica antes de enviarla.');
+      mantener.reiniciar();
+      return;
+    }
+    txt.textContent = 'Transmitiendo…';
+    E.estrellasAntes = E.inicio.estrellas;
+    let res;
+    try {
+      res = await llamar('entregarMision', m.id, [{ m: $('#m0').value.trim(), e: $('#e0').value.trim() }], { prediccion: prediccion, destino: marcado });
+    } catch (err) {
+      aviso(mensajeError(err));
+      txt.textContent = 'Mantén para corregir';
+      mantener.reiniciar();
+      return;
+    }
+    try { sessionStorage.removeItem(claveP); sessionStorage.removeItem(claveD); } catch (e) { /* sin almacenamiento */ }
+    E.inicio = res.inicio;
+    pintarBarra();
+    $('.en-curso').textContent = '⏳ Corrigiendo la órbita';
+    const sel = res.destino === null ? marcado : res.destino;
+    mostrarEjecucion(`Corrección de <b>${esc(s.sats[sel].nombre)}</b>: <b>${formatoNum(valor, 4)} m/s</b>`,
+      [['correccion', 'Encendido de corrección'], ['seguimiento', 'Seguimiento de la órbita'], ['evaluacion', 'Evaluación']], 'Corrigiendo la órbita');
+    E.sim.destruir();
+    E.sim = crearSimTrafico($('#vista'), { s: s, GM: res.extra.GM, marcado: sel, anom: res.extra.anom, dv: valor, estrellas: res.estrellas, alFase: faseEjecucion });
+    E.sim.ejecutar(resultadoSim => informeTrafico(m, res, valor, resultadoSim));
+  }, () => {
+    txt.textContent = 'Mantén pulsado…';
+    clearTimeout(boton._t);
+    boton._t = setTimeout(() => { txt.textContent = 'Mantén para corregir'; }, 1400);
+  });
+}
+
+function informeTrafico(m, res, valor, resultadoSim) {
+  const s = m.escena, x = res.extra;
+  $('.consola-cuerpo').classList.add('resultado');
+  const lateral = $('#lateral');
+  const estrellas = Array.from({ length: m.estrellas }, (_, i) =>
+    `<span style="animation-delay:${0.15 + i * 0.25}s" class="${i < res.estrellas ? '' : 'apagada'}">★</span>`).join('');
+  const A = s.sats[x.anom];
+  const elegido = res.destino === null ? null : s.sats[res.destino];
+  const textosPred = { mayor: 'se aleja', igual: 'sigue igual', menor: 'se acerca' };
+  const pred = res.prediccion
+    ? `<p class="informe-pred">Predijiste que un satélite demasiado rápido <b class="${res.prediccion === 'mayor' ? 'ok' : 'mal'}">${textosPred[res.prediccion]}</b>.
+        ${res.prediccion === 'mayor' ? '¡Correcto!' : 'En realidad se aleja.'}
+        Con más velocidad de la necesaria, la gravedad no basta para curvar su trayectoria en una circunferencia: describe una elipse cuyo punto más cercano es donde está ahora.
+        Tu satélite anómalo, ${esc(A.nombre)}, iba ${x.rapido ? 'demasiado rápido: se estaba alejando' : 'demasiado lento: se estaba acercando al planeta'}.</p>`
+    : '';
+  const titulo = res.estrellas === m.estrellas ? 'Tráfico bajo control' : res.estrellas > 0 ? 'Corrección aproximada' : 'Corrección fallida';
+  const tabla = s.sats.map((sat, i) => `
+    <tr class="${i === x.anom ? 'correcto' : ''}"><td>${esc(sat.nombre)}${i === res.destino ? ' ◆' : ''}</td>
+      <td>${formatoNum(sat.v, 4)}</td><td>${formatoNum(x.vo[i], 4)}</td><td>${(sat.v / x.vo[i] - 1 >= 0 ? '+' : '−') + formatoNum(Math.abs(sat.v / x.vo[i] - 1) * 100, 2)} %</td></tr>`).join('');
+
+  lateral.classList.remove('ejecutando');
+  lateral.classList.add('informe');
+  lateral.innerHTML = `
+    <div class="bloque-hud">
+      <div class="bloque-hud-tit">Informe de misión</div>
+      ${resultadoSim ? `<div class="informe-sim ${resultadoSim.ok ? 'ok' : 'mal'}">${esc(resultadoSim.texto)}</div>` : ''}
+      <div class="informe-estrellas">${estrellas}</div>
+      <div class="informe-resumen">${titulo} · ${res.estrellas} de ${m.estrellas} ★</div>
+    </div>
+    <div class="bloque-hud">
+      <div class="bloque-hud-tit">Satélite y corrección</div>
+      <table class="informe-tabla">
+        <tr><td>Marcaste</td><td class="${res.destino === x.anom ? 'ok' : 'mal'}">${elegido ? esc(elegido.nombre) + (res.destino === x.anom ? ' ✓' : ' ✕') : '—'}</td></tr>
+        <tr><td>Satélite anómalo</td><td>${esc(A.nombre)}</td></tr>
+        <tr><td>Tu Δv</td><td>${formatoNum(valor, 4)} m/s</td></tr>
+        <tr><td>Δv necesario</td><td>${formatoNum(res.sol, 4)} m/s</td></tr>
+        <tr><td>Error relativo</td><td>${res.error === null ? 'signo incorrecto' : res.error < 0.0001 ? '< 0,01 %' : formatoNum(res.error * 100, 3) + ' %'}</td></tr>
+      </table>
+      <div class="informe-escala">Satélite correcto y ${textoEscala(m.estrellas)}</div>
+    </div>
+    ${res.pista ? `<div class="informe-pista"><b>Diagnóstico</b>${esc(res.pista)}</div>` : ''}
+    <div class="bloque-hud">
+      <div class="bloque-hud-tit">Los tres satélites (m/s)</div>
+      <table class="informe-tabla">
+        <tr><td>Satélite</td><td>Medida</td><td>Orbital</td><td>Diferencia</td></tr>
+        ${tabla}
+      </table>
+    </div>
+    ${pred ? `<div class="bloque-hud"><div class="bloque-hud-tit">Tu predicción</div>${pred}</div>` : ''}
+    <div class="bloque-hud">
+      <div class="bloque-hud-tit">Resolución</div>
+      <ol class="pasos">${res.pasos.map(p => `<li>${p}</li>`).join('')}</ol>
+    </div>
+    <button id="btn-volver" class="btn-hud principal" type="button">Volver al registro de misiones</button>`;
+  renderMates(lateral);
+  lateral.scrollTop = 0;
+  $('.en-curso').textContent = '✓ Misión completada';
+  $('#btn-volver').addEventListener('click', pantallaPanel);
+  celebrar(E.estrellasAntes, res.inicio.estrellas, res.inicio.objetivo);
+}
+
+/* ------------------------------ Radar ------------------------------ */
+
+/** Dibuja un satélite (cuerpo y paneles) en (x, y) orientado según su sentido de avance. */
+function dibujarSat(ctx, x, y, ang, color) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(-ang);
+  ctx.fillStyle = '#5aa9ff'; ctx.fillRect(-2.5, -11, 5, 7); ctx.fillRect(-2.5, 4, 5, 7);
+  ctx.fillStyle = color || '#e8edf5'; ctx.fillRect(-4, -4, 8, 8);
+  ctx.restore();
+}
+
+/**
+ * Captura del radar: el planeta (visto desde el polo), las tres órbitas previstas y los satélites quietos.
+ * Al pulsar un satélite (o su pestaña) se ve su ficha; «Marcar como anómalo» fija la elección.
+ */
+function crearRadar(cont, s, marcadoInicial, alMarcar) {
+  const lienzo = document.createElement('canvas');
+  lienzo.id = 'lienzo-radar';
+  cont.insertBefore(lienzo, cont.firstChild);
+  const ctx = lienzo.getContext('2d');
+  let W = 0, H = 0;
+  const fondo = Array.from({ length: 160 }, () => ({ x: Math.random(), y: Math.random(), r: Math.random() * 1.1 + 0.2, a: Math.random() * 0.6 + 0.2 }));
+  const ajustar = () => {
+    const k = Math.min(window.devicePixelRatio || 1, 2);
+    W = cont.clientWidth; H = cont.clientHeight;
+    lienzo.width = W * k; lienzo.height = H * k;
+    ctx.setTransform(k, 0, 0, k, 0, 0);
+  };
+  const ro = new ResizeObserver(ajustar);
+  ro.observe(cont);
+  ajustar();
+
+  const rasgos = rasgosPolo(s.planeta);
+  const km = n => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  let sel = marcadoInicial === null ? 0 : marcadoInicial, marcado = marcadoInicial;
+
+  const ficha = document.createElement('div');
+  ficha.className = 'ficha-sat';
+  cont.appendChild(ficha);
+  function pintarFichaSat() {
+    const x = s.sats[sel];
+    ficha.innerHTML = `
+      <div class="pestanas">${s.sats.map((q, i) => `<button type="button" data-i="${i}" class="${i === sel ? 'activa' : ''} ${i === marcado ? 'marcado' : ''}">${esc(q.nombre)}</button>`).join('')}</div>
+      <dl>
+        <dt>Altura</dt><dd>${km(x.h)} km</dd>
+        <dt>Velocidad (radar)</dt><dd>${km(x.v)} m/s</dd>
+        <dt>Masa</dt><dd>${km(x.masa)} kg</dd>
+      </dl>
+      <button type="button" class="btn-marcar ${sel === marcado ? 'hecho' : ''}">${sel === marcado ? '✓ Marcado como anómalo' : 'Marcar como anómalo'}</button>`;
+    ficha.querySelectorAll('[data-i]').forEach(b => b.addEventListener('click', () => { sel = Number(b.dataset.i); pintarFichaSat(); }));
+    ficha.querySelector('.btn-marcar').addEventListener('click', () => { marcado = sel; pintarFichaSat(); alMarcar(sel); });
+  }
+  pintarFichaSat();
+
+  let geo = null;
+  lienzo.addEventListener('click', ev => {
+    if (!geo) return;
+    const r = lienzo.getBoundingClientRect(), x = ev.clientX - r.left, y = ev.clientY - r.top;
+    let mejor = null, dmin = 26;
+    geo.forEach((p, i) => { const d = Math.hypot(p[0] - x, p[1] - y); if (d < dmin) { dmin = d; mejor = i; } });
+    if (mejor !== null) { sel = mejor; pintarFichaSat(); }
+  });
+
+  let vivo = true, t = 0, previo = performance.now();
+  function bucle(ahora) {
+    if (!vivo) return;
+    const dt = Math.min(0.05, (ahora - previo) / 1000); previo = ahora; t += dt;
+    ctx.clearRect(0, 0, W, H);
+    fondo.forEach(st => { ctx.globalAlpha = st.a; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(st.x * W, st.y * H, st.r, 0, Math.PI * 2); ctx.fill(); });
+    ctx.globalAlpha = 1;
+    const cx = W * 0.56, cy = H / 2;
+    const rmax = Math.max(...s.sats.map(q => s.R + q.h * 1e3));
+    const k = Math.min(W * 0.4, H * 0.43) / rmax;
+    dibujarPolo(ctx, cx, cy, s.R * k, 0.4, rasgos, t * 0.02);
+    // barrido del radar
+    const ab = t * 0.8;
+    const grad = ctx.createConicGradient ? ctx.createConicGradient(-ab, cx, cy) : null;
+    if (grad) {
+      grad.addColorStop(0, 'rgba(63,224,255,0.16)'); grad.addColorStop(0.08, 'rgba(63,224,255,0)'); grad.addColorStop(1, 'rgba(63,224,255,0)');
+      ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(cx, cy, rmax * k * 1.08, 0, Math.PI * 2); ctx.fill();
+    }
+    geo = [];
+    s.sats.forEach((q, i) => {
+      const r = (s.R + q.h * 1e3) * k, a = ANGULOS_SAT[i];
+      ctx.save(); ctx.setLineDash([5, 7]); ctx.strokeStyle = i === sel ? 'rgba(63,224,255,0.75)' : 'rgba(200,230,255,0.3)'; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+      const x = cx + Math.cos(a) * r, y = cy - Math.sin(a) * r;
+      geo.push([x, y]);
+      if (i === sel) { ctx.strokeStyle = '#3fe0ff'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x, y, 14, 0, Math.PI * 2); ctx.stroke(); }
+      if (i === marcado) {
+        ctx.strokeStyle = '#ffb92e'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(x, y - 19); ctx.lineTo(x + 19, y); ctx.lineTo(x, y + 19); ctx.lineTo(x - 19, y); ctx.closePath(); ctx.stroke();
+      }
+      dibujarSat(ctx, x, y, a + Math.PI / 2);
+      ctx.font = '600 11px "Chakra Petch", sans-serif'; ctx.fillStyle = i === marcado ? '#ffb92e' : 'rgba(220,235,255,0.85)'; ctx.textAlign = 'left';
+      ctx.fillText(q.nombre + (i === marcado ? ' · ANÓMALO' : ''), x + 16, y - 10);
+    });
+    requestAnimationFrame(bucle);
+  }
+  requestAnimationFrame(bucle);
+
+  return { destruir() { vivo = false; ro.disconnect(); lienzo.remove(); ficha.remove(); } };
+}
+
+/* --------------------------- Simulador ---------------------------- */
+
+/**
+ * Corrección: el satélite marcado recibe el Δv del alumno; si no era el anómalo, el anómalo sigue sin corregir.
+ * Se integran las trayectorias (leapfrog) durante ~1,5 periodos y se mide cuánto se separan de su órbita.
+ */
+function crearSimTrafico(cont, p) {
+  const lienzo = document.createElement('canvas');
+  cont.insertBefore(lienzo, cont.firstChild);
+  const ctx = lienzo.getContext('2d');
+  let W = 0, H = 0;
+  const fondo = Array.from({ length: 160 }, () => ({ x: Math.random(), y: Math.random(), r: Math.random() * 1.1 + 0.2, a: Math.random() * 0.6 + 0.2 }));
+  const ajustar = () => {
+    const k = Math.min(window.devicePixelRatio || 1, 2);
+    W = cont.clientWidth; H = cont.clientHeight;
+    lienzo.width = W * k; lienzo.height = H * k;
+    ctx.setTransform(k, 0, 0, k, 0, 0);
+  };
+  const ro = new ResizeObserver(ajustar);
+  ro.observe(cont);
+  ajustar();
+
+  const s = p.s, rasgos = rasgosPolo(s.planeta);
+  const tel = $('#telemetria'), elFase = $('#fase');
+  tel.hidden = false;
+  const r0 = s.sats.map(q => s.R + q.h * 1e3);
+  const km = n => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  // cuerpos que se simulan: el marcado (con Δv) y, si es otro, el anómalo sin corregir
+  const cuerpos = [];
+  const nuevo = (i, v, etiqueta, color) => {
+    const a = ANGULOS_SAT[i];
+    cuerpos.push({ i: i, x: Math.cos(a) * r0[i], y: Math.sin(a) * r0[i], vx: -Math.sin(a) * v, vy: Math.cos(a) * v, estela: [], dmax: 0, choque: false, fuera: false, etiqueta: etiqueta, color: color });
+  };
+  nuevo(p.marcado, s.sats[p.marcado].v + p.dv, s.sats[p.marcado].nombre + ' · CORREGIDO', '#ffb92e');
+  if (p.marcado !== p.anom) nuevo(p.anom, s.sats[p.anom].v, s.sats[p.anom].nombre + ' · SIN CORREGIR', '#ff3d7f');
+  const Tref = 2 * Math.PI * Math.sqrt(Math.pow(Math.max(...cuerpos.map(c => r0[c.i])), 3) / p.GM);
+  const TSIM = 1.5 * Tref, DUR = 8;
+  let fase = 'espera', tFase = 0, tSim = 0, detenido = false, alFinal = null;
+  const nombres = { correccion: 'Encendido de corrección', seguimiento: 'Seguimiento de la órbita', evaluacion: 'Evaluación' };
+  const ponerFase = nf => { fase = nf; tFase = 0; elFase.textContent = nombres[nf]; if (p.alFase) p.alFase(nf, nombres[nf]); };
+  const rmax = Math.max(...r0);
+
+  function terminar() {
+    if (detenido) return;
+    detenido = true;
+    const c = cuerpos[0], nombre = s.sats[p.marcado].nombre;
+    let texto;
+    const ok = p.estrellas > 0;
+    if (p.marcado !== p.anom) texto = 'Has desviado ' + nombre + ', que estaba bien, y ' + s.sats[p.anom].nombre + ' sigue fuera de su órbita';
+    else if (c.choque) texto = nombre + ' ha caído al planeta: la corrección no era la adecuada';
+    else if (ok) texto = 'Órbita corregida: ' + nombre + ' sigue en su órbita (desviación máxima: ' + km(c.dmax / 1000) + ' km)';
+    else texto = 'La corrección no basta: ' + nombre + ' se separa hasta ' + km(c.dmax / 1000) + ' km de su órbita';
+    const msg = $('#mensaje');
+    msg.textContent = texto;
+    msg.className = 'vista-hud vista-mensaje ' + (ok ? 'ok' : 'mal');
+    if (alFinal) { const cb = alFinal; alFinal = null; setTimeout(() => cb({ texto: texto, ok: ok }), 900); }
+  }
+
+  function paso(c, h) {
+    let r3 = Math.pow(c.x * c.x + c.y * c.y, 1.5);
+    c.vx -= p.GM * c.x / r3 * h / 2; c.vy -= p.GM * c.y / r3 * h / 2;
+    c.x += c.vx * h; c.y += c.vy * h;
+    r3 = Math.pow(c.x * c.x + c.y * c.y, 1.5);
+    c.vx -= p.GM * c.x / r3 * h / 2; c.vy -= p.GM * c.y / r3 * h / 2;
+  }
+
+  function avanzar(dt) {
+    if (detenido || fase === 'espera') return;
+    tFase += dt;
+    if (fase === 'correccion') { if (tFase > 0.9) ponerFase('seguimiento'); return; }
+    if (fase === 'seguimiento') {
+      const total = dt * TSIM / DUR, sub = Math.max(1, Math.ceil(total / 5));
+      for (let k = 0; k < sub; k++) {
+        cuerpos.forEach(c => {
+          if (c.choque || c.fuera) return;
+          paso(c, total / sub);
+          const r = Math.hypot(c.x, c.y);
+          c.dmax = Math.max(c.dmax, Math.abs(r - r0[c.i]));
+          if (r < s.R) c.choque = true;
+          if (r > rmax * 3) c.fuera = true;
+        });
+      }
+      tSim += total;
+      if (tSim >= TSIM) ponerFase('evaluacion');
+      return;
+    }
+    if (fase === 'evaluacion' && tFase > 1) terminar();
+  }
+
+  let vivo = true, t = 0, previo = performance.now();
+  function bucle(ahora) {
+    if (!vivo) return;
+    const dt = Math.min(0.05, (ahora - previo) / 1000); previo = ahora; t += dt;
+    avanzar(dt);
+    ctx.clearRect(0, 0, W, H);
+    fondo.forEach(st => { ctx.globalAlpha = st.a; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(st.x * W, st.y * H, st.r, 0, Math.PI * 2); ctx.fill(); });
+    ctx.globalAlpha = 1;
+    const cx = W * 0.5, cy = H / 2;
+    const k = Math.min(W, H) * 0.4 / (rmax * 1.25);
+    dibujarPolo(ctx, cx, cy, s.R * k, 0.4, rasgos, t * 0.02);
+    // órbitas previstas
+    r0.forEach((r, i) => {
+      ctx.save(); ctx.setLineDash([5, 7]); ctx.strokeStyle = cuerpos.some(c => c.i === i) ? 'rgba(126,226,168,0.55)' : 'rgba(200,230,255,0.22)'; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.arc(cx, cy, r * k, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+    });
+    cuerpos.forEach(c => {
+      const x = cx + c.x * k, y = cy - c.y * k;
+      if (fase === 'seguimiento' || fase === 'evaluacion') { c.estela.push([x, y]); if (c.estela.length > 900) c.estela.shift(); }
+      if (c.estela.length > 1) {
+        ctx.strokeStyle = c.color; ctx.globalAlpha = 0.6; ctx.lineWidth = 1.6; ctx.beginPath();
+        c.estela.forEach((q, j) => j ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1])); ctx.stroke(); ctx.globalAlpha = 1;
+      }
+      if (!c.fuera) dibujarSat(ctx, x, y, Math.atan2(c.vy, c.vx), c.color);
+      ctx.font = '600 10.5px "Chakra Petch", sans-serif'; ctx.fillStyle = c.color; ctx.textAlign = 'left';
+      ctx.fillText(c.etiqueta, x + 14, y - 10);
+    });
+    const c = cuerpos[0];
+    tel.innerHTML = `TIEMPO <b>${formatoNum(tSim / 3600, 3)} h</b><br>SEPARACIÓN MÁXIMA DE ${esc(s.sats[p.marcado].nombre)} <b>${km(c.dmax / 1000)} km</b>`;
+    requestAnimationFrame(bucle);
+  }
+  requestAnimationFrame(bucle);
+
+  return {
+    ejecutar(alTerminar) {
+      alFinal = alTerminar;
+      $('#mensaje').textContent = '';
+      ponerFase('correccion');
+    },
+    destruir() { vivo = false; ro.disconnect(); lienzo.remove(); }
+  };
+}
+</script>

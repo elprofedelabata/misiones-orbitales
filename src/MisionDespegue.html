@@ -1,0 +1,649 @@
+<style>
+  /* =================================================================
+   * Misión «Billete de vuelta»: catálogo de mundos (ruleta 3D) y despegue
+   * (reutiliza los estilos de la consola de «Ascenso orbital»)
+   * ================================================================= */
+  .catalogo { position: absolute; inset: 0; z-index: 1; }
+  .catalogo-escena { position: absolute; inset: 58px 78px 46px; perspective: 1100px; perspective-origin: 50% 40%; transform-style: preserve-3d; }
+  .mundo-carta { position: absolute; inset: 0; margin: auto; width: min(300px, 48%); height: fit-content; max-height: 100%;
+    display: flex; flex-direction: column; gap: 8px; padding: 14px 16px 16px; color: var(--hud-blanco);
+    background: linear-gradient(170deg, rgba(16,27,54,0.97), rgba(6,10,22,0.97)); border: 1px solid var(--hud-linea-fuerte);
+    clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 16px 100%, 0 calc(100% - 16px));
+    transition: transform .65s cubic-bezier(.2,.8,.2,1), opacity .65s, filter .65s; cursor: pointer; }
+  .mundo-carta[data-pos="0"] { transform: translateZ(0) rotateY(0); cursor: default; }
+  .mundo-carta[data-pos="-1"] { transform: translateX(-80%) translateZ(-240px) rotateY(44deg); opacity: 0.55; filter: brightness(0.6) saturate(0.6); }
+  .mundo-carta[data-pos="1"] { transform: translateX(80%) translateZ(-240px) rotateY(-44deg); opacity: 0.55; filter: brightness(0.6) saturate(0.6); }
+  .mundo-carta[data-pos="-1"]:hover, .mundo-carta[data-pos="1"]:hover { opacity: 0.75; filter: brightness(0.8) saturate(0.8); }
+  .mundo-carta.fijado { border-color: var(--hud-ambar); box-shadow: inset 0 0 0 1px rgba(255,185,46,0.4); }
+  .mundo-cab { display: flex; justify-content: space-between; align-items: center; gap: 8px; font: 11px 'Share Tech Mono', monospace; color: var(--hud-cian); letter-spacing: 0.06em; }
+  .mundo-tipo { font: 600 10.5px 'Chakra Petch', sans-serif; letter-spacing: 0.16em; text-transform: uppercase; color: rgba(220,235,255,0.6); }
+  .consola-vista .mundo-lienzo { position: static; display: block; width: 100%; height: auto; aspect-ratio: 1.55; }
+  .mundo-nombre { margin: 0; font: 700 22px/1.1 'Chakra Petch', sans-serif; letter-spacing: 0.14em; text-transform: uppercase; }
+  .mundo-ficha { margin: 0; display: grid; grid-template-columns: auto 1fr; font: 12.5px/1.25 'Share Tech Mono', monospace; }
+  .mundo-ficha dt, .mundo-ficha dd { margin: 0; padding: 4px 0; border-bottom: 1px solid rgba(200,230,255,0.09); }
+  .mundo-ficha dt { color: rgba(220,235,255,0.55); padding-right: 10px; }
+  .mundo-ficha dd { text-align: right; color: var(--hud-blanco); }
+  .btn-fijar { margin-top: 4px; min-height: 40px; border: 1px solid var(--hud-ambar); background: rgba(255,185,46,0.08); color: var(--hud-ambar); cursor: pointer;
+    font: 700 12px 'Chakra Petch', sans-serif; letter-spacing: 0.18em; text-transform: uppercase; transition: background .15s, color .15s; }
+  .btn-fijar:hover { background: rgba(255,185,46,0.2); }
+  .mundo-carta.fijado .btn-fijar { background: var(--hud-ambar); color: #1a1100; }
+  .mundo-carta:not([data-pos="0"]) .btn-fijar { pointer-events: none; }
+  .mundo-sello { display: none; position: absolute; top: 44px; right: 14px; padding: 3px 8px; background: var(--hud-ambar); color: #1a1100;
+    font: 700 10px 'Chakra Petch', sans-serif; letter-spacing: 0.18em; text-transform: uppercase; }
+  .mundo-carta.fijado .mundo-sello { display: block; }
+
+  .carrusel-flecha { position: absolute; z-index: 3; top: 50%; width: 46px; height: 54px; margin-top: -27px; display: grid; place-items: center;
+    border: 0; background: rgba(63,224,255,0.12); color: var(--hud-cian); cursor: pointer;
+    clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%); transition: background .15s, color .15s; }
+  .carrusel-flecha:hover { background: var(--hud-cian); color: #04121a; }
+  .carrusel-flecha:focus-visible { outline: none; background: var(--hud-ambar); color: #1a1100; }
+  .carrusel-flecha svg { width: 18px; height: 18px; }
+  .carrusel-flecha.izq { left: 16px; } .carrusel-flecha.der { right: 16px; }
+  .carrusel-pie { position: absolute; z-index: 3; left: 0; right: 0; bottom: 14px; display: flex; justify-content: center; align-items: center; gap: 10px;
+    font: 12px 'Share Tech Mono', monospace; color: rgba(220,235,255,0.6); pointer-events: none; }
+  .carrusel-pie i { width: 8px; height: 8px; border: 1.5px solid var(--hud-cian); transform: rotate(45deg); }
+  .carrusel-pie i.actual { background: var(--hud-cian); }
+  .carrusel-pie i.fijado { border-color: var(--hud-ambar); }
+  .carrusel-pie i.fijado.actual { background: var(--hud-ambar); }
+  .vista-catalogo { top: 16px; left: 20px; }
+  .vista-catalogo .fase { font: 600 13px 'Chakra Petch', sans-serif; letter-spacing: 0.18em; text-transform: uppercase; color: var(--hud-ambar); }
+
+  .destino-estado { display: flex; align-items: center; gap: 10px; font: 13px 'Share Tech Mono', monospace; color: rgba(220,235,255,0.6); }
+  .destino-estado b { font: 700 15px 'Chakra Petch', sans-serif; letter-spacing: 0.14em; text-transform: uppercase; color: var(--hud-ambar); }
+  .destino-estado .rombo { width: 10px; height: 10px; flex: none; border: 1.5px solid currentColor; transform: rotate(45deg); }
+  .destino-estado.ok .rombo { background: var(--hud-ambar); color: var(--hud-ambar); }
+  .informe-tabla tr.correcto td { color: #7ee2a8 !important; }
+  .informe-tabla .ok { color: #7ee2a8 !important; } .informe-tabla .mal { color: var(--hud-magenta) !important; }
+
+  @media (max-height: 780px) {
+    .consola-vista .mundo-lienzo { aspect-ratio: 2.1; }
+    .mundo-carta { gap: 6px; padding: 12px 14px 14px; }
+    .mundo-nombre { font-size: 19px; }
+    .mundo-ficha { font-size: 12px; }
+    .mundo-ficha dt, .mundo-ficha dd { padding: 3px 0; }
+  }
+  @media (max-width: 860px) {
+    .consola-vista.con-catalogo { min-height: 560px; }
+    .catalogo-escena { inset: 58px 56px 46px; }
+    .mundo-carta { width: min(300px, 70%); }
+    .carrusel-flecha.izq { left: 6px; } .carrusel-flecha.der { right: 6px; }
+  }
+</style>
+<script>
+/* =====================================================================
+ * Misión «Billete de vuelta»: tres mundos en un catálogo giratorio.
+ * El alumno fija como destino el de menor velocidad de escape y la calcula.
+ * ===================================================================== */
+
+function pantallaDespegue(m) {
+  limpiarVista();
+  E.mision = m;
+  document.body.classList.add('vista-consola');
+  const s = m.escena;
+  const claveP = 'prediccion-' + m.id, claveD = 'destino-' + m.id;
+  let prediccion = null, destino = null;
+  try {
+    prediccion = sessionStorage.getItem(claveP);
+    const d = sessionStorage.getItem(claveD);
+    destino = d === null ? null : Number(d);
+  } catch (e) { /* sin almacenamiento */ }
+
+  app.innerHTML = `
+    <section class="consola">
+      <header class="consola-cab">
+        <span class="consola-icono">${iconoMision(m)}</span>
+        <div>
+          <div class="consola-kicker">MSN-${m.id} · Consola de despegue</div>
+          <h1>${esc(m.titulo)}</h1>
+        </div>
+        <span class="dificultad">${dificultad(m.estrellas)}</span>
+        <span class="en-curso">🔒 Misión en curso · no se puede abandonar</span>
+      </header>
+      <div class="consola-cuerpo">
+        <div class="consola-vista con-catalogo" id="vista">
+          <div class="esquinas"><span></span></div>
+          <div class="vista-hud vista-catalogo" id="hud-catalogo">
+            <div class="fase">Catálogo de aterrizaje</div>
+            <div class="hud-dato">G <b>${formatoNum(s.G)} N·m²/kg²</b></div>
+          </div>
+          <div class="vista-hud vista-telemetria" id="telemetria" hidden></div>
+          <div class="vista-hud vista-fase" id="hud-fase" hidden><div class="fase" id="fase"></div><div class="hud-nombre" id="hud-mundo"></div></div>
+          <div class="vista-hud vista-mensaje" id="mensaje"></div>
+        </div>
+        <aside class="consola-lateral" id="lateral">
+          <div class="bloque-hud orden">
+            <div class="bloque-hud-tit">Orden de Control de Misión</div>
+            <p>${esc(m.historia)}</p>
+          </div>
+          <div class="bloque-hud paso-hud">
+            <div class="bloque-hud-tit"><span>01</span> Predicción</div>
+            <p class="orden" style="margin:0 0 8px;font-size:14px;color:rgba(225,235,255,.85)">Con ${formatoNum(s.mCarga, 4)} kg de muestras a bordo, comparada con la nave vacía, la velocidad de escape será…</p>
+            <div class="predicciones">
+              <button type="button" class="prediccion" data-p="mayor">Mayor</button>
+              <button type="button" class="prediccion" data-p="igual">Igual</button>
+              <button type="button" class="prediccion" data-p="menor">Menor</button>
+            </div>
+            <p class="paso-nota">No puntúa: lo comprobarás al final.</p>
+          </div>
+          <div class="bloque-hud paso-hud">
+            <div class="bloque-hud-tit"><span>02</span> Destino</div>
+            <div class="destino-estado" id="destino-estado"></div>
+          </div>
+          <div class="bloque-hud paso-hud" id="paso-maniobra">
+            <div class="bloque-hud-tit"><span>03</span> Programar el despegue</div>
+            <div class="maniobra-entrada">
+              <span class="simbolo">v<sub>e</sub> =</span>
+              <input class="in-mantisa" id="m0" inputmode="decimal" placeholder="mantisa" aria-label="Mantisa">
+              <span class="por-diez">·10^</span>
+              <input class="in-exp" id="e0" inputmode="numeric" placeholder="exp" aria-label="Exponente">
+              <span class="unidad">m/s</span>
+            </div>
+            <div class="maniobra-previa" id="previa">Velocidad de despegue desde el mundo elegido.</div>
+            <button id="btn-ejecutar" class="btn-hud btn-mantener" type="button" aria-label="Mantén pulsado para despegar">
+              <span class="relleno"></span>
+              <svg class="icono" viewBox="0 0 20 20" aria-hidden="true"><polygon points="10,1 19,10 10,19 1,10" fill="none" stroke="currentColor" stroke-width="2"/><polygon points="10,6 14,10 10,14 6,10" fill="currentColor"/></svg>
+              <span class="txt">Mantén para despegar</span>
+            </button>
+          </div>
+        </aside>
+      </div>
+    </section>`;
+
+  const pasoManiobra = $('#paso-maniobra');
+  const marcar = () => {
+    app.querySelectorAll('.prediccion').forEach(b => b.classList.toggle('activa', b.dataset.p === prediccion));
+    const w = destino === null ? null : s.mundos[destino];
+    const est = $('#destino-estado');
+    est.classList.toggle('ok', !!w);
+    est.innerHTML = w
+      ? `<span class="rombo"></span><span><b>${esc(w.nombre)}</b> · ${esc(w.tipo)}</span>`
+      : '<span class="rombo"></span><span>Sin destino: fíjalo en el catálogo.</span>';
+    pasoManiobra.classList.toggle('bloqueado', !prediccion || destino === null);
+  };
+
+  E.sim = crearCarrusel($('#vista'), s.mundos, destino, i => {
+    destino = i;
+    try { sessionStorage.setItem(claveD, String(i)); } catch (e) { /* sin almacenamiento */ }
+    marcar();
+  });
+
+  app.querySelectorAll('.prediccion').forEach(b => b.addEventListener('click', () => {
+    prediccion = b.dataset.p;
+    try { sessionStorage.setItem(claveP, prediccion); } catch (e) { /* sin almacenamiento */ }
+    marcar();
+  }));
+  marcar();
+
+  // vista previa del número
+  const previa = $('#previa');
+  const actualizarPrevia = () => {
+    const v = leerNumeroCliente($('#m0').value, $('#e0').value);
+    if (!$('#m0').value.trim() && !$('#e0').value.trim()) { previa.textContent = 'Velocidad de despegue desde el mundo elegido.'; previa.classList.remove('error'); return null; }
+    if (v === null) { previa.textContent = 'Formato no válido'; previa.classList.add('error'); return null; }
+    previa.classList.remove('error');
+    previa.textContent = 'v = ' + formatoNum(v, 4) + ' m/s';
+    return v;
+  };
+  ['#m0', '#e0'].forEach(sel => $(sel).addEventListener('input', actualizarPrevia));
+
+  // despegar (mantener pulsado): entrega, simula y muestra el informe
+  const boton = $('#btn-ejecutar'), txt = boton.querySelector('.txt');
+  const mantener = botonMantener(boton, 900, async () => {
+    const valor = actualizarPrevia();
+    if (valor === null) {
+      aviso('Escribe la velocidad en notación científica antes de despegar.');
+      mantener.reiniciar();
+      return;
+    }
+    txt.textContent = 'Transmitiendo…';
+    E.estrellasAntes = E.inicio.estrellas;
+    let res;
+    try {
+      res = await llamar('entregarMision', m.id, [{ m: $('#m0').value.trim(), e: $('#e0').value.trim() }], { prediccion: prediccion, destino: destino });
+    } catch (err) {
+      aviso(mensajeError(err));
+      txt.textContent = 'Mantén para despegar';
+      mantener.reiniciar();
+      return;
+    }
+    try { sessionStorage.removeItem(claveP); sessionStorage.removeItem(claveD); } catch (e) { /* sin almacenamiento */ }
+    E.inicio = res.inicio;
+    pintarBarra();
+    $('.en-curso').textContent = '⏳ Ejecutando despegue';
+    const w = s.mundos[res.destino === null ? destino : res.destino];
+    mostrarEjecucion(`Despegue desde <b>${esc(w.nombre)}</b> a <b>${formatoNum(valor, 4)} m/s</b>`,
+      [['encendido', 'Encendido de motores'], ['ascenso', 'Ascenso'], ['escape', 'Escape gravitatorio']], 'Despegue en curso');
+    // el catálogo deja paso a la vista del despegue
+    E.sim.destruir();
+    $('#vista').classList.remove('con-catalogo');
+    $('#hud-catalogo').hidden = true;
+    E.sim = crearSimDespegue($('#vista'), {
+      mundo: w, R: w.D * 500, ve: Math.sqrt(2 * s.G * w.M / (w.D * 500)),
+      acierto: res.estrellas > 0, optimo: res.destino === res.extra.correcta, alFase: faseEjecucion
+    });
+    E.sim.ejecutar(valor, resultadoSim => informeDespegue(m, res, valor, resultadoSim));
+  }, () => {
+    txt.textContent = 'Mantén pulsado…';
+    clearTimeout(boton._t);
+    boton._t = setTimeout(() => { txt.textContent = 'Mantén para despegar'; }, 1400);
+  });
+}
+
+function informeDespegue(m, res, valor, resultadoSim) {
+  const s = m.escena, x = res.extra;
+  $('.consola-cuerpo').classList.add('resultado');
+  const lateral = $('#lateral');
+  const estrellas = Array.from({ length: m.estrellas }, (_, i) =>
+    `<span style="animation-delay:${0.15 + i * 0.25}s" class="${i < res.estrellas ? '' : 'apagada'}">★</span>`).join('');
+  const bien = s.mundos[x.correcta];
+  const elegido = res.destino === null ? null : s.mundos[res.destino];
+  const textosPred = { mayor: 'mayor', igual: 'la misma', menor: 'menor' };
+  const total = s.mVacia + s.mCarga;
+  const pred = res.prediccion
+    ? `<p class="informe-pred">Predijiste que, con las muestras a bordo, la velocidad de escape sería <b class="${res.prediccion === 'igual' ? 'ok' : 'mal'}">${textosPred[res.prediccion]}</b>.
+        ${res.prediccion === 'igual' ? '¡Correcto!' : 'En realidad es la misma.'}
+        La masa de la nave se simplifica en \\(\\tfrac12 m v_e^2 = \\dfrac{GMm}{R}\\): con ${formatoNum(s.mVacia, 5)} kg o con ${formatoNum(total, 5)} kg hay que alcanzar la misma velocidad.
+        Eso sí, la nave cargada necesita más energía (y más combustible) para llegar a ella.</p>`
+    : '';
+  const titulo = res.estrellas === m.estrellas ? 'Billete de vuelta conseguido' : 'Despegue fallido';
+  const comparativa = s.mundos.map((w, i) => `
+    <tr class="${i === x.correcta ? 'correcto' : ''}"><td>${esc(w.nombre)}${i === res.destino ? ' ◆' : ''}</td>
+      <td>${formatoNum(w.M / (w.D * 500), 3)}</td><td>${formatoNum(x.ves[i], 4)} m/s</td></tr>`).join('');
+
+  lateral.classList.remove('ejecutando');
+  lateral.classList.add('informe');
+  lateral.innerHTML = `
+    <div class="bloque-hud">
+      <div class="bloque-hud-tit">Informe de misión</div>
+      ${resultadoSim ? `<div class="informe-sim ${resultadoSim.ok ? 'ok' : 'mal'}">${esc(resultadoSim.texto)}</div>` : ''}
+      <div class="informe-estrellas">${estrellas}</div>
+      <div class="informe-resumen">${titulo} · ${res.estrellas} de ${m.estrellas} ★</div>
+    </div>
+    <div class="bloque-hud">
+      <div class="bloque-hud-tit">Destino y velocidad de escape</div>
+      <table class="informe-tabla">
+        <tr><td>Tu destino</td><td class="${res.destino === x.correcta ? 'ok' : 'mal'}">${elegido ? esc(elegido.nombre) + (res.destino === x.correcta ? ' ✓' : ' ✕') : '—'}</td></tr>
+        <tr><td>Destino óptimo</td><td>${esc(bien.nombre)}</td></tr>
+        <tr><td>Tu velocidad</td><td>${formatoNum(valor, 4)} m/s</td></tr>
+        <tr><td>v<sub>e</sub> de ${esc(bien.nombre)}</td><td>${formatoNum(res.sol, 4)} m/s</td></tr>
+        <tr><td>Error relativo</td><td>${res.error === null ? 'signo incorrecto' : res.error < 0.0001 ? '< 0,01 %' : formatoNum(res.error * 100, 3) + ' %'}</td></tr>
+      </table>
+      <div class="informe-escala">Destino óptimo y error &lt;5 % ★</div>
+    </div>
+    ${res.pista ? `<div class="informe-pista"><b>Diagnóstico</b>${esc(res.pista)}</div>` : ''}
+    <div class="bloque-hud">
+      <div class="bloque-hud-tit">Comparativa de los tres mundos</div>
+      <table class="informe-tabla">
+        <tr><td>Mundo</td><td>M/R (kg/m)</td><td>v<sub>e</sub></td></tr>
+        ${comparativa}
+      </table>
+    </div>
+    ${pred ? `<div class="bloque-hud"><div class="bloque-hud-tit">Tu predicción</div>${pred}</div>` : ''}
+    <div class="bloque-hud">
+      <div class="bloque-hud-tit">Resolución</div>
+      <ol class="pasos">${res.pasos.map(p => `<li>${p}</li>`).join('')}</ol>
+    </div>
+    <button id="btn-volver" class="btn-hud principal" type="button">Volver al registro de misiones</button>`;
+  renderMates(lateral);
+  lateral.scrollTop = 0;
+  $('.en-curso').textContent = '✓ Misión completada';
+  $('#btn-volver').addEventListener('click', pantallaPanel);
+  celebrar(E.estrellasAntes, res.inicio.estrellas, res.inicio.objetivo);
+}
+
+/* ----------------------- Catálogo giratorio ----------------------- */
+
+/**
+ * Carrusel de tres fichas con efecto de ruleta 3D (las fichas giran; los planetas son 2D).
+ * Flechas en pantalla y del teclado; «Fijar destino» en la ficha del frente.
+ */
+function crearCarrusel(cont, mundos, fijadoInicial, alFijar) {
+  const n = mundos.length;
+  let actual = fijadoInicial === null ? 0 : fijadoInicial, fijado = fijadoInicial;
+  const raiz = document.createElement('div');
+  raiz.className = 'catalogo';
+  const flecha = d => `<svg viewBox="0 0 20 20" aria-hidden="true"><polyline points="${d < 0 ? '13,3 6,10 13,17' : '7,3 14,10 7,17'}" fill="none" stroke="currentColor" stroke-width="2.6"/></svg>`;
+  raiz.innerHTML = `
+    <div class="catalogo-escena">
+      ${mundos.map((w, i) => `
+        <article class="mundo-carta" data-i="${i}" aria-label="Mundo ${esc(w.nombre)}">
+          <div class="mundo-cab"><span>MUNDO 0${i + 1}</span><span class="mundo-tipo">${esc(w.tipo)}</span></div>
+          <canvas class="mundo-lienzo"></canvas>
+          <span class="mundo-sello">Destino</span>
+          <h2 class="mundo-nombre">${esc(w.nombre)}</h2>
+          <dl class="mundo-ficha">
+            <dt>Diámetro ecuatorial</dt><dd>${formatoNum(w.D, 5).replace(/\B(?=(\d{3})+(?!\d))/g, ' ')} km</dd>
+            <dt>Masa</dt><dd>${formatoNum(w.M)} kg</dd>
+            <dt>Temperatura media</dt><dd>${w.temp < 0 ? '−' + Math.abs(w.temp) : w.temp} °C</dd>
+            <dt>Periodo de rotación</dt><dd>${formatoNum(w.rot)} h</dd>
+            <dt>Atmósfera</dt><dd>${esc(w.atm)}</dd>
+            <dt>Lunas</dt><dd>${w.lunas}</dd>
+          </dl>
+          <button type="button" class="btn-fijar">Fijar destino</button>
+        </article>`).join('')}
+    </div>
+    <button type="button" class="carrusel-flecha izq" aria-label="Mundo anterior">${flecha(-1)}</button>
+    <button type="button" class="carrusel-flecha der" aria-label="Mundo siguiente">${flecha(1)}</button>
+    <div class="carrusel-pie"><span id="carrusel-num"></span>${mundos.map(() => '<i></i>').join('')}</div>`;
+  cont.insertBefore(raiz, cont.querySelector('.vista-hud'));
+
+  const cartas = Array.from(raiz.querySelectorAll('.mundo-carta'));
+  const rombos = Array.from(raiz.querySelectorAll('.carrusel-pie i'));
+  const pintar = () => {
+    cartas.forEach((c, i) => {
+      const pos = ((i - actual + n + 1) % n) - 1;          // −1, 0, +1
+      c.dataset.pos = pos;
+      c.setAttribute('aria-hidden', pos !== 0);
+      c.classList.toggle('fijado', i === fijado);
+      c.querySelector('.btn-fijar').textContent = i === fijado ? '✓ Destino fijado' : 'Fijar destino';
+      c.querySelector('.btn-fijar').tabIndex = pos === 0 ? 0 : -1;
+    });
+    rombos.forEach((r, i) => { r.classList.toggle('actual', i === actual); r.classList.toggle('fijado', i === fijado); });
+    raiz.querySelector('#carrusel-num').textContent = `MUNDO ${actual + 1} / ${n}`;
+  };
+  const girar = d => { actual = (actual + d + n) % n; pintar(); };
+  raiz.querySelector('.izq').addEventListener('click', () => girar(-1));
+  raiz.querySelector('.der').addEventListener('click', () => girar(1));
+  cartas.forEach((c, i) => {
+    c.addEventListener('click', ev => {
+      if (c.dataset.pos !== '0') { girar(Number(c.dataset.pos)); return; }
+      if (ev.target.closest('.btn-fijar')) { fijado = i; pintar(); alFijar(i); }
+    });
+  });
+  const teclas = ev => {
+    if ((ev.target.closest && ev.target.closest('input, textarea')) || !raiz.isConnected) return;
+    if (ev.key === 'ArrowLeft') { ev.preventDefault(); girar(-1); }
+    if (ev.key === 'ArrowRight') { ev.preventDefault(); girar(1); }
+  };
+  document.addEventListener('keydown', teclas);
+  pintar();
+
+  // planetas animados (2D), uno por ficha
+  const lienzos = cartas.map(c => c.querySelector('canvas'));
+  const rasgos = mundos.map(w => rasgosMundo(w));
+  let vivo = true, t0 = performance.now();
+  function bucle(ahora) {
+    if (!vivo) return;
+    const t = (ahora - t0) / 1000;
+    lienzos.forEach((lz, i) => {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const w = lz.clientWidth, h = lz.clientHeight;
+      if (!w || !h) return;
+      if (lz.width !== Math.round(w * dpr)) { lz.width = Math.round(w * dpr); lz.height = Math.round(h * dpr); }
+      const ctx = lz.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, w, h);
+      dibujarMundo(ctx, w / 2, h / 2, Math.min(w, h) * 0.4, t, rasgos[i]);
+    });
+    requestAnimationFrame(bucle);
+  }
+  requestAnimationFrame(bucle);
+
+  return {
+    destruir() { vivo = false; document.removeEventListener('keydown', teclas); raiz.remove(); }
+  };
+}
+
+/* ------------------------- Planetas en 2D ------------------------- */
+
+const ESTILOS_MUNDO = {
+  helado: { base: ['#f4f9ff', '#a8c4de', '#56779c'], halo: 'rgba(170,215,255,0.32)', mancha: ['#cfe0ef', '#9db8d2'], grieta: 'rgba(70,120,175,0.85)', crater: 4, grietas: 10, manchas: 8, polos: true },
+  rocoso: { base: ['#c9bdad', '#8b8074', '#4a433c'], halo: 'rgba(225,215,205,0.12)', mancha: ['#6f665d', '#7d7369'], crater: 24, grietas: 0, manchas: 6 },
+  volcanico: { base: ['#5d3b31', '#2f1b16', '#130908'], halo: 'rgba(255,120,50,0.35)', mancha: ['#ff8a2e', '#ffb347'], grieta: '#ff7a2a', crater: 4, grietas: 13, manchas: 7, lava: true },
+  desertico: { base: ['#f3c891', '#c98a4e', '#744521'], halo: 'rgba(255,190,120,0.25)', mancha: ['#9a5c2c', '#b0733d'], crater: 7, grietas: 0, manchas: 6, bandas: 7 }
+};
+
+/** Rasgos fijos de cada mundo (cráteres, manchas, grietas…) a partir de su nombre. */
+function rasgosMundo(w) {
+  let h = 2166136261;
+  for (const ch of w.nombre + w.estilo) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+  const azar = () => { h = Math.imul(h ^ (h >>> 15), 2246822507); h = Math.imul(h ^ (h >>> 13), 3266489909); h ^= h >>> 16; return (h >>> 0) / 4294967296; };
+  const e = ESTILOS_MUNDO[w.estilo] || ESTILOS_MUNDO.rocoso;
+  const lat = () => Math.asin(azar() * 1.8 - 0.9);
+  return {
+    e: e,
+    vel: 0.12 + azar() * 0.1,
+    crateres: Array.from({ length: e.crater }, () => ({ lon: azar() * Math.PI * 2, lat: lat(), r: 0.03 + Math.pow(azar(), 2) * 0.11 })),
+    manchas: Array.from({ length: e.manchas }, () => ({ lon: azar() * Math.PI * 2, lat: lat(), r: 0.08 + azar() * 0.16, c: e.mancha[Math.floor(azar() * 2)], a: 0.35 + azar() * 0.35 })),
+    grietas: Array.from({ length: e.grietas }, () => {
+      let lo = azar() * Math.PI * 2, la = lat();
+      const dir = azar() * Math.PI * 2;
+      return Array.from({ length: 7 }, () => {
+        const p = [lo, la];
+        lo += Math.cos(dir) * 0.12 + (azar() - 0.5) * 0.12;
+        la = Math.max(-1.3, Math.min(1.3, la + Math.sin(dir) * 0.08 + (azar() - 0.5) * 0.1));
+        return p;
+      });
+    }),
+    bandas: Array.from({ length: e.bandas || 0 }, (_, i) => ({ lat: -1.1 + (i + 0.5) * 2.2 / e.bandas, alto: 0.05 + azar() * 0.07, fase: azar() * 6 }))
+  };
+}
+
+/** Dibuja un mundo sólido que gira: cráteres, manchas y grietas proyectados sobre la esfera, con luz arriba a la izquierda. */
+function dibujarMundo(ctx, cx, cy, rad, t, r) {
+  const e = r.e, giro = t * r.vel;
+  const halo = ctx.createRadialGradient(cx, cy, rad * 0.94, cx, cy, rad * 1.22);
+  halo.addColorStop(0, e.halo); halo.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = halo; ctx.beginPath(); ctx.arc(cx, cy, rad * 1.22, 0, Math.PI * 2); ctx.fill();
+  ctx.save();
+  ctx.beginPath(); ctx.arc(cx, cy, rad, 0, Math.PI * 2); ctx.clip();
+  const base = ctx.createRadialGradient(cx - rad * 0.3, cy - rad * 0.35, rad * 0.1, cx, cy, rad);
+  base.addColorStop(0, e.base[0]); base.addColorStop(0.55, e.base[1]); base.addColorStop(1, e.base[2]);
+  ctx.fillStyle = base; ctx.fillRect(cx - rad, cy - rad, rad * 2, rad * 2);
+
+  const proy = (lon, lat) => {
+    const l = lon + giro;
+    return { x: cx + rad * Math.cos(lat) * Math.sin(l), y: cy - rad * Math.sin(lat), z: Math.cos(lat) * Math.cos(l), cl: Math.cos(l), cb: Math.cos(lat) };
+  };
+  // dunas (bandas onduladas)
+  r.bandas.forEach(b => {
+    const y = cy - Math.sin(b.lat) * rad, a = b.alto * rad, ancho = Math.cos(b.lat) * rad;
+    ctx.globalAlpha = 0.22; ctx.fillStyle = '#ffe2b8';
+    ctx.beginPath(); ctx.moveTo(cx - ancho, y);
+    for (let x = -1; x <= 1.001; x += 0.1) ctx.lineTo(cx + x * ancho, y - a / 2 + Math.sin(x * 7 + giro * 3 + b.fase) * a * 0.3);
+    for (let x = 1; x >= -1.001; x -= 0.1) ctx.lineTo(cx + x * ancho, y + a / 2 + Math.sin(x * 6 + giro * 3 + b.fase) * a * 0.3);
+    ctx.fill();
+  });
+  // manchas
+  r.manchas.forEach(mn => {
+    const p = proy(mn.lon, mn.lat);
+    if (p.z <= 0) return;
+    ctx.globalAlpha = mn.a * Math.min(1, p.z * 3);
+    ctx.fillStyle = mn.c;
+    if (e.lava) { ctx.shadowColor = '#ff7a2a'; ctx.shadowBlur = 10; }
+    ctx.beginPath(); ctx.ellipse(p.x, p.y, mn.r * rad * Math.max(0.12, p.cl) * (e.lava ? 0.45 : 1), mn.r * rad * Math.max(0.2, p.cb) * (e.lava ? 0.45 : 1), 0, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0;
+  });
+  // cráteres: hoyo oscuro con borde iluminado
+  r.crateres.forEach(c => {
+    const p = proy(c.lon, c.lat);
+    if (p.z <= 0) return;
+    const rx = c.r * rad * Math.max(0.1, p.cl), ry = c.r * rad * Math.max(0.2, p.cb);
+    ctx.globalAlpha = 0.55 * Math.min(1, p.z * 3);
+    ctx.fillStyle = 'rgba(30,24,20,0.55)'; ctx.beginPath(); ctx.ellipse(p.x, p.y, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,248,235,0.5)'; ctx.lineWidth = Math.max(0.8, rad * 0.008);
+    ctx.beginPath(); ctx.ellipse(p.x, p.y, rx, ry, 0, Math.PI * 0.9, Math.PI * 1.9); ctx.stroke();
+  });
+  // grietas (hielo) o fisuras de lava
+  if (r.grietas.length) {
+    ctx.strokeStyle = e.grieta; ctx.lineWidth = Math.max(1, rad * (e.lava ? 0.016 : 0.01)); ctx.lineCap = 'round';
+    if (e.lava) { ctx.shadowColor = '#ff6a1a'; ctx.shadowBlur = 8; }
+    r.grietas.forEach(g => {
+      const pts = g.map(q => proy(q[0], q[1]));
+      for (let i = 1; i < pts.length; i++) {
+        const a = pts[i - 1], b = pts[i];
+        if (a.z <= 0 || b.z <= 0) continue;
+        ctx.globalAlpha = Math.min(1, Math.min(a.z, b.z) * 3) * (e.lava ? 0.95 : 0.75);
+        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+      }
+    });
+    ctx.shadowBlur = 0;
+  }
+  // casquetes polares
+  if (e.polos) {
+    ctx.globalAlpha = 0.85; ctx.fillStyle = '#ffffff';
+    ctx.beginPath(); ctx.ellipse(cx, cy - rad * 0.96, rad * 0.42, rad * 0.16, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 0.6;
+    ctx.beginPath(); ctx.ellipse(cx, cy + rad * 0.98, rad * 0.3, rad * 0.1, 0, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  // luz y sombra: brillo arriba a la izquierda, borde oscurecido
+  const luz = ctx.createRadialGradient(cx - rad * 0.4, cy - rad * 0.4, rad * 0.05, cx, cy, rad * 1.02);
+  luz.addColorStop(0, 'rgba(255,255,255,0.22)'); luz.addColorStop(0.45, 'rgba(255,255,255,0)');
+  luz.addColorStop(0.8, 'rgba(0,0,0,0.25)'); luz.addColorStop(1, 'rgba(0,0,0,0.85)');
+  ctx.fillStyle = luz; ctx.fillRect(cx - rad, cy - rad, rad * 2, rad * 2);
+  ctx.restore();
+}
+
+/* --------------------------- Simulador ---------------------------- */
+
+/**
+ * Despegue vertical. Unidades normalizadas: R = 1 y v_e = 1 (así GM = 1/2).
+ * La cámara se aleja a medida que sube la nave. Si la entrega es correcta (destino
+ * óptimo y error < 5 %), los motores corrigen el pequeño déficit y la nave escapa.
+ */
+function crearSimDespegue(cont, p) {
+  const lienzo = document.createElement('canvas');
+  cont.insertBefore(lienzo, cont.firstChild);
+  const ctx = lienzo.getContext('2d');
+  let W = 0, H = 0;
+  const fondo = Array.from({ length: 170 }, () => ({ x: Math.random(), y: Math.random(), r: Math.random() * 1.1 + 0.2, a: Math.random() * 0.6 + 0.2 }));
+  const ajustar = () => {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = cont.clientWidth; H = cont.clientHeight;
+    lienzo.width = W * dpr; lienzo.height = H * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  };
+  const ro = new ResizeObserver(ajustar);
+  ro.observe(cont);
+  ajustar();
+
+  const rasgos = rasgosMundo(p.mundo);
+  const tel = $('#telemetria'), elFase = $('#fase');
+  tel.hidden = false; $('#hud-fase').hidden = false;
+  $('#hud-mundo').textContent = p.mundo.nombre + ' · ' + p.mundo.tipo;
+  const km = n => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+
+  let r = 1, v = 0, f = 0, fase = 'espera', tFase = 0, detenido = false, alFinal = null;
+  let rVista = 1, rApogeo = null, corregida = false;
+  const R_FIN = 25;                         // la nave «ha escapado» al llegar a 25 radios con energía ≥ 0
+  const nombresFase = { espera: 'En plataforma', encendido: 'Encendido de motores', ascenso: 'Ascenso', escape: 'Escape gravitatorio',
+    caida: 'Caída hacia la superficie', abortada: 'Despegue abortado' };
+  const ponerFase = nf => { fase = nf; tFase = 0; elFase.textContent = nombresFase[nf] || nf; if (p.alFase) p.alFase(nf, nombresFase[nf] || nf); };
+  elFase.textContent = nombresFase.espera;
+
+  function terminar(motivo) {
+    if (detenido) return;
+    detenido = true;
+    let texto, ok = false;
+    if (motivo === 'abortada') texto = 'Despegue abortado: la velocidad debe ser positiva';
+    else if (motivo === 'escape') {
+      ok = p.acierto;
+      if (p.acierto) texto = corregida ? 'Escape conseguido tras una corrección de empuje · rumbo a casa' : 'Escape conseguido · rumbo a casa';
+      else if (!p.optimo) texto = 'Escapa, pero desde ' + p.mundo.nombre + ' el despegue no era el más barato';
+      else texto = 'Escapa, pero quemando más combustible del necesario: no queda para el viaje de vuelta';
+    } else if (motivo === 'lejos') texto = 'Velocidad insuficiente: llegaría a ' + km((rApogeo - 1) * p.R / 1000) + ' km de altura y volvería a caer';
+    else texto = 'Velocidad insuficiente: la nave sube ' + km((rApogeo - 1) * p.R / 1000) + ' km y vuelve a caer';
+    const msg = $('#mensaje');
+    msg.textContent = texto;
+    msg.className = 'vista-hud vista-mensaje ' + (ok ? 'ok' : 'mal');
+    if (alFinal) { const cb = alFinal; alFinal = null; setTimeout(() => cb({ texto: texto, ok: ok }), 900); }
+  }
+
+  function avanzar(dtVis) {
+    if (detenido) return;
+    tFase += dtVis;
+    if (fase === 'abortada') { if (tFase > 1.4) terminar('abortada'); return; }
+    if (fase === 'encendido') { if (tFase > 1.1) { v = f; ponerFase('ascenso'); } return; }
+    if (fase !== 'ascenso' && fase !== 'escape' && fase !== 'caida') return;
+    // el tiempo se acelera con la distancia para que el vuelo dure unos segundos
+    const dtN = dtVis * 0.9 * Math.pow(Math.max(1, r), 1.5);
+    const sub = Math.max(1, Math.ceil(dtN / (0.004 * Math.pow(r, 1.5))));
+    const h = dtN / sub;
+    for (let i = 0; i < sub; i++) {
+      v -= 0.5 / (r * r) * h / 2; r += v * h; v -= 0.5 / (r * r) * h / 2;     // leapfrog, GM = 1/2
+      if (r <= 1) { r = 1; break; }
+    }
+    rVista = Math.max(rVista, r);
+    const energia = v * v / 2 - 0.5 / r;
+    if (fase === 'ascenso' && energia >= 0 && r > 3) ponerFase('escape');
+    if (energia < 0 && rApogeo === null) rApogeo = 1 / (1 - f * f);
+    if (rApogeo !== null && rApogeo > R_FIN * 1.6 && r > R_FIN) { terminar('lejos'); return; }
+    if (fase === 'ascenso' && v < 0) ponerFase('caida');
+    if (energia >= 0 && r > R_FIN) terminar('escape');
+    if (fase === 'caida' && r <= 1) terminar('caida');
+  }
+
+  function dibujarNave(x, y, llama, esc_) {
+    ctx.save(); ctx.translate(x, y); ctx.scale(esc_, esc_);
+    if (llama) {
+      const l = 12 + Math.random() * 9;
+      const g = ctx.createLinearGradient(0, 6, 0, 6 + l);
+      g.addColorStop(0, '#fff6c4'); g.addColorStop(0.4, '#ffb92e'); g.addColorStop(1, 'rgba(255,90,40,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(-3.5, 6); ctx.lineTo(0, 6 + l); ctx.lineTo(3.5, 6); ctx.fill();
+    }
+    ctx.fillStyle = '#e8edf5';
+    ctx.beginPath(); ctx.moveTo(0, -10); ctx.lineTo(4.5, -2); ctx.lineTo(4.5, 6); ctx.lineTo(-4.5, 6); ctx.lineTo(-4.5, -2); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#9fb3cc'; ctx.beginPath(); ctx.moveTo(-4.5, 1); ctx.lineTo(-8, 7); ctx.lineTo(-4.5, 6); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(4.5, 1); ctx.lineTo(8, 7); ctx.lineTo(4.5, 6); ctx.fill();
+    ctx.fillStyle = '#3fe0ff'; ctx.fillRect(-1.5, -4, 3, 3);
+    ctx.restore();
+  }
+
+  function actualizarHud() {
+    const alt = (r - 1) * p.R / 1000;
+    tel.innerHTML = `ALTITUD <b>${km(alt)} km</b><br>VELOCIDAD <b>${formatoNum(Math.abs(v) * p.ve, 4)} m/s</b>` +
+      (rApogeo !== null && rApogeo < R_FIN * 1.6 ? `<br>ALTURA MÁXIMA <b>${km((rApogeo - 1) * p.R / 1000)} km</b>` : '');
+  }
+
+  let vivo = true, previo = performance.now(), t = 0;
+  function bucle(ahora) {
+    if (!vivo) return;
+    const dt = Math.min(0.05, (ahora - previo) / 1000);
+    previo = ahora; t += dt;
+    avanzar(dt);
+
+    ctx.clearRect(0, 0, W, H);
+    fondo.forEach(s => { ctx.globalAlpha = s.a; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(s.x * W, s.y * H, s.r, 0, Math.PI * 2); ctx.fill(); });
+    ctx.globalAlpha = 1;
+    // cámara: el centro del planeta fijo abajo; la escala se ajusta para que quepa la mayor altura alcanzada
+    const cx = W / 2, cy = H * 0.8;
+    const k = (cy - 70) / Math.max(1.45, rVista * 1.12);
+    dibujarMundo(ctx, cx, cy, k, t, rasgos);
+    // altura máxima prevista
+    if (rApogeo !== null && rApogeo < R_FIN * 1.6) {
+      const ya = cy - rApogeo * k;
+      ctx.save(); ctx.setLineDash([5, 6]); ctx.strokeStyle = 'rgba(255,61,127,0.6)'; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.moveTo(cx - 70, ya); ctx.lineTo(cx + 70, ya); ctx.stroke(); ctx.restore();
+      ctx.font = '600 10.5px "Chakra Petch", sans-serif'; ctx.fillStyle = 'rgba(255,61,127,0.85)'; ctx.textAlign = 'left';
+      ctx.fillText('ALTURA MÁXIMA', cx + 76, ya + 4);
+    }
+    // estela y nave
+    const yN = cy - r * k;
+    if (r > 1.001) {
+      const g = ctx.createLinearGradient(0, cy - k, 0, yN);
+      g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(1, 'rgba(255,255,255,0.45)');
+      ctx.strokeStyle = g; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(cx, cy - k); ctx.lineTo(cx, yN); ctx.stroke();
+    }
+    dibujarNave(cx, yN - 6, fase === 'encendido' || (fase === 'ascenso' && tFase < 0.5), 1.2);
+    actualizarHud();
+    requestAnimationFrame(bucle);
+  }
+  requestAnimationFrame(bucle);
+
+  return {
+    ejecutar(vAlumno, alTerminar) {
+      alFinal = alTerminar;
+      $('#mensaje').textContent = '';
+      if (!(vAlumno > 0)) { ponerFase('abortada'); return; }
+      f = vAlumno / p.ve;
+      // entrega correcta: los motores compensan el pequeño déficit (como en el acoplamiento)
+      if (p.acierto && f < 1.02) { corregida = f < 0.99; f = 1.02; }
+      // a menos de un 1 % de la velocidad de escape es redondeo: la nave escapa
+      else if (Math.abs(f - 1) < 0.01) f = Math.max(f, 1.01);
+      ponerFase('encendido');
+    },
+    destruir() { vivo = false; ro.disconnect(); lienzo.remove(); }
+  };
+}
+</script>
