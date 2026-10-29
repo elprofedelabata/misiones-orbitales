@@ -246,7 +246,7 @@ function crearObservatorio(cont, s) {
     <section class="obs-panel">
       <header class="obs-cab">
         <span class="obs-tit">Fotómetro · curva de luz</span>
-        <span class="obs-ayuda">Rueda: ampliar · Arrastrar: desplazar · Clic: marcador</span>
+        <span class="obs-ayuda"><span class="solo-raton">Rueda: ampliar · Arrastrar: desplazar · Clic: marcador</span><span class="solo-tactil">+ / −: ampliar · Arrastrar: desplazar · Toca: marcador</span></span>
         <div class="obs-botones">
           <button type="button" data-acc="menos" aria-label="Reducir">−</button>
           <button type="button" data-acc="mas" aria-label="Ampliar">+</button>
@@ -260,7 +260,7 @@ function crearObservatorio(cont, s) {
       <section class="obs-panel">
         <header class="obs-cab">
           <span class="obs-tit">Coronógrafo</span>
-          <span class="obs-ayuda">Arrastra para medir · Flechas: ajuste fino</span>
+          <span class="obs-ayuda">Arrastra para medir<span class="solo-raton"> · Flechas: ajuste fino</span></span>
           <div class="obs-botones"><button type="button" data-acc="regla">Borrar regla</button></div>
         </header>
         <div class="lienzo-caja"><canvas id="lienzo-imagen" tabindex="0" aria-label="Imagen del coronógrafo"></canvas></div>
@@ -381,6 +381,7 @@ function crearObservatorio(cont, s) {
     ampliar(ev.deltaY > 0 ? 1.25 : 0.8, tDeX(ev.clientX - r.left));
   }, { passive: false });
   let arrastre = null;
+  lzC.style.touchAction = 'pan-y';          // la curva se desplaza en horizontal; en vertical se mueve la página (el coronógrafo sí bloquea ambas)
   lzC.addEventListener('pointerdown', ev => {
     if (ev.button !== 0) return;
     lzC.setPointerCapture(ev.pointerId);
@@ -394,6 +395,8 @@ function crearObservatorio(cont, s) {
     const dt = -dx / (geoC.x1 - geoC.x0) * (arrastre.v1 - arrastre.v0);
     v0 = arrastre.v0 + dt; v1 = arrastre.v1 + dt; limitar(); pintarCurva();
   });
+  // el navegador se queda el gesto (deslizar en vertical con el dedo): sin marcador
+  lzC.addEventListener('pointercancel', () => { arrastre = null; lzC.classList.remove('arrastrando'); });
   lzC.addEventListener('pointerup', ev => {
     if (!arrastre) return;
     const clic = !arrastre.movido;

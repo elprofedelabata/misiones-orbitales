@@ -222,7 +222,7 @@ function crearCajaNegra(cont, s) {
     <section class="obs-panel">
       <header class="obs-cab">
         <span class="obs-tit">Caja negra · velocidad (radar)</span>
-        <span class="obs-ayuda">Rueda: ampliar · Arrastrar: desplazar · Clic: marca</span>
+        <span class="obs-ayuda"><span class="solo-raton">Rueda: ampliar · Arrastrar: desplazar · Clic: marca</span><span class="solo-tactil">+ / −: ampliar · Arrastrar: desplazar · Toca: marca</span></span>
         <div class="obs-botones">
           <button type="button" data-acc="menos" aria-label="Reducir">−</button>
           <button type="button" data-acc="mas" aria-label="Ampliar">+</button>
@@ -362,6 +362,7 @@ function crearCajaNegra(cont, s) {
     ampliar(ev.deltaY > 0 ? 1.25 : 0.8, tDeX(ev.clientX - r.left));
   }, { passive: false });
   let arrastre = null;
+  lzT.style.touchAction = 'pan-y';          // con el dedo: arrastrar en horizontal desplaza la gráfica, en vertical la página
   lzT.addEventListener('pointerdown', ev => {
     if (ev.button !== 0) return;
     lzT.setPointerCapture(ev.pointerId);
@@ -383,6 +384,8 @@ function crearCajaNegra(cont, s) {
     pintarTele(); pintarCaida(); lecturas();
   });
   lzT.addEventListener('pointerleave', () => { cursor = null; pintarTele(); lecturas(); });
+  // el navegador se queda el gesto (deslizar en vertical con el dedo): sin marca
+  lzT.addEventListener('pointercancel', () => { arrastre = null; lzT.classList.remove('arrastrando'); });
   lzT.addEventListener('pointerup', ev => {
     if (!arrastre) return;
     const clic = !arrastre.movido;

@@ -176,6 +176,7 @@ function crearAvatar(contenedor, cfg, opciones) {
   let arrastrando = false, xPrevio = 0, giro = op.mini ? 0.35 : 0.45, ultimoArrastre = 0;
   if (!op.mini) {
     const el = renderer.domElement;
+    el.style.touchAction = 'pan-y';         // girar con el dedo en horizontal sin bloquear el desplazamiento vertical
     el.addEventListener('pointerdown', e => { arrastrando = true; xPrevio = e.clientX; el.setPointerCapture(e.pointerId); });
     el.addEventListener('pointermove', e => {
       if (!arrastrando) return;

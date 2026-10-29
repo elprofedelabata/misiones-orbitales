@@ -147,6 +147,9 @@
   }
   @media (max-width: 860px) {
     .consola-cuerpo { grid-template-columns: 1fr; }
+    /* en una columna, la orden de Control de Misión va antes del simulador: primero se sabe qué buscar */
+    .consola-lateral { display: contents; }
+    .consola-lateral > .orden { order: -1; }
     .consola-vista { min-height: 380px; }
     .energias { width: 120px; } .energias-graf { height: 90px; }
     .combustible { width: 140px; }

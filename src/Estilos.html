@@ -739,7 +739,8 @@
     .tornillo.t1, .tornillo.t2 { display: none; }
     .pantalla { height: auto; }
     .pantalla-cuerpo { grid-template-columns: 1fr; }
-    .lista { max-height: 340px; border-right: 0; border-bottom: 1px solid var(--hud-linea); }
+    /* la lista entera, sin desplazamiento propio (dentro de otra página que ya se desplaza era incómoda) */
+    .lista { max-height: none; overflow: visible; border-right: 0; border-bottom: 1px solid var(--hud-linea); }
     .ficha { overflow: visible; padding: 18px 16px; }
     .ficha-titulo { font-size: 22px; }
     .ficha-contenido { grid-template-columns: 1fr; }
@@ -847,6 +848,43 @@
   @media (max-width: 560px) { .final-resumen { grid-template-columns: 1fr; } }
 
   /* Modo práctica (versión web): las misiones completadas se pueden repetir, así que no se tachan */
+  /* ---------------- Móvil: pantalla estrecha o teléfono en horizontal ---------------- */
+  @media (max-width: 600px), (max-height: 500px) {
+    /* barra en una sola fila y sin quedarse fija: en horizontal llegaba a tapar media pantalla */
+    .barra { position: relative; flex-wrap: nowrap; gap: 8px; padding: 8px 12px; }
+    .barra-avatar { width: 40px; height: 44px; }
+    .barra-id { flex: 1 1 auto; }
+    .barra-id .barra-etq { display: none; }
+    .barra-nombre { font-size: 15px; }
+    .barra-rango { font-size: 10px; letter-spacing: 0.1em; white-space: nowrap; overflow: hidden; }
+    .barra-rango .galon-barra { display: none; }      /* el galón ya se ve en los hombros del astronauta */
+    .barra-progreso { order: 0; flex: 0 1 88px; flex-basis: 88px; min-width: 72px; max-width: 160px; margin-left: 0; }
+    .barra-progreso-txt { justify-content: flex-end; margin-bottom: 3px; }
+    .barra-progreso-txt .barra-etq { display: none; }
+    .barra-progreso-txt > span:last-child { font-size: 12px; }
+    .barra-progreso-txt b { font-size: 15px; }
+    .barra-grupos { display: none; }
+    .barra-segmentos { padding: 0 2px; }
+    .seg-grupo { gap: 1px; }
+    .seg { height: 7px; }
+    .seg-grupo.extra .seg { height: 5px; }
+    .seg-sep { height: 10px; margin: 0 3px; }
+    .barra .btn-reglas { flex: none; padding: 9px; }
+    .barra .btn-reglas span { display: none; }      /* solo el icono (llevan aria-label) */
+
+    /* tablet del panel con un marco más ligero */
+    .tablet { padding: 10px 6px 26px; border-radius: 18px; }
+    .tablet .goma, .tablet .tornillo, .tablet-camara { display: none; }
+    .practica .marca-terminal { display: none; }
+  }
+
+  /* textos de ayuda según se use ratón o pantalla táctil */
+  .solo-tactil { display: none; }
+  @media (hover: none) and (pointer: coarse) {
+    .solo-raton { display: none; }
+    .solo-tactil { display: inline; }
+  }
+
   /* créditos de autoría (versión web) */
   .enlace-creditos { color: var(--hud-ambar); text-decoration: none; pointer-events: auto; }
   .enlace-creditos:hover { text-decoration: underline; }

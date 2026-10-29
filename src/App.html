@@ -338,6 +338,7 @@ if (PRACTICA) {
   b.id = 'btn-nueva-partida';
   b.className = 'btn-reglas';
   b.type = 'button';
+  b.setAttribute('aria-label', 'Empezar una nueva partida');
   b.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4.5h4.5"/></svg><span>Nueva partida</span>';
   $('#btn-reglas').after(b);
   b.addEventListener('click', async () => {
@@ -511,7 +512,7 @@ function pantallaPanel() {
               <article class="ficha" id="ficha" aria-live="polite"></article>
             </div>
           </div>
-          <div class="tablet-marca">MC-7 · Terminal de misión${PRACTICA ? ` · ${CREDITOS}` : ''}</div>
+          <div class="tablet-marca"><span class="marca-terminal">MC-7 · Terminal de misión${PRACTICA ? ' · ' : ''}</span>${PRACTICA ? CREDITOS : ''}</div>
         </div>
         <div class="manos-capa manos-delante" id="manos-delante" aria-hidden="true"></div>
       </div>

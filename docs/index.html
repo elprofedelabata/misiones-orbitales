@@ -752,7 +752,8 @@
     .tornillo.t1, .tornillo.t2 { display: none; }
     .pantalla { height: auto; }
     .pantalla-cuerpo { grid-template-columns: 1fr; }
-    .lista { max-height: 340px; border-right: 0; border-bottom: 1px solid var(--hud-linea); }
+    /* la lista entera, sin desplazamiento propio (dentro de otra página que ya se desplaza era incómoda) */
+    .lista { max-height: none; overflow: visible; border-right: 0; border-bottom: 1px solid var(--hud-linea); }
     .ficha { overflow: visible; padding: 18px 16px; }
     .ficha-titulo { font-size: 22px; }
     .ficha-contenido { grid-template-columns: 1fr; }
@@ -860,6 +861,43 @@
   @media (max-width: 560px) { .final-resumen { grid-template-columns: 1fr; } }
 
   /* Modo práctica (versión web): las misiones completadas se pueden repetir, así que no se tachan */
+  /* ---------------- Móvil: pantalla estrecha o teléfono en horizontal ---------------- */
+  @media (max-width: 600px), (max-height: 500px) {
+    /* barra en una sola fila y sin quedarse fija: en horizontal llegaba a tapar media pantalla */
+    .barra { position: relative; flex-wrap: nowrap; gap: 8px; padding: 8px 12px; }
+    .barra-avatar { width: 40px; height: 44px; }
+    .barra-id { flex: 1 1 auto; }
+    .barra-id .barra-etq { display: none; }
+    .barra-nombre { font-size: 15px; }
+    .barra-rango { font-size: 10px; letter-spacing: 0.1em; white-space: nowrap; overflow: hidden; }
+    .barra-rango .galon-barra { display: none; }      /* el galón ya se ve en los hombros del astronauta */
+    .barra-progreso { order: 0; flex: 0 1 88px; flex-basis: 88px; min-width: 72px; max-width: 160px; margin-left: 0; }
+    .barra-progreso-txt { justify-content: flex-end; margin-bottom: 3px; }
+    .barra-progreso-txt .barra-etq { display: none; }
+    .barra-progreso-txt > span:last-child { font-size: 12px; }
+    .barra-progreso-txt b { font-size: 15px; }
+    .barra-grupos { display: none; }
+    .barra-segmentos { padding: 0 2px; }
+    .seg-grupo { gap: 1px; }
+    .seg { height: 7px; }
+    .seg-grupo.extra .seg { height: 5px; }
+    .seg-sep { height: 10px; margin: 0 3px; }
+    .barra .btn-reglas { flex: none; padding: 9px; }
+    .barra .btn-reglas span { display: none; }      /* solo el icono (llevan aria-label) */
+
+    /* tablet del panel con un marco más ligero */
+    .tablet { padding: 10px 6px 26px; border-radius: 18px; }
+    .tablet .goma, .tablet .tornillo, .tablet-camara { display: none; }
+    .practica .marca-terminal { display: none; }
+  }
+
+  /* textos de ayuda según se use ratón o pantalla táctil */
+  .solo-tactil { display: none; }
+  @media (hover: none) and (pointer: coarse) {
+    .solo-raton { display: none; }
+    .solo-tactil { display: inline; }
+  }
+
   /* créditos de autoría (versión web) */
   .enlace-creditos { color: var(--hud-ambar); text-decoration: none; pointer-events: auto; }
   .enlace-creditos:hover { text-decoration: underline; }
@@ -2513,6 +2551,7 @@ function crearAvatar(contenedor, cfg, opciones) {
   let arrastrando = false, xPrevio = 0, giro = op.mini ? 0.35 : 0.45, ultimoArrastre = 0;
   if (!op.mini) {
     const el = renderer.domElement;
+    el.style.touchAction = 'pan-y';         // girar con el dedo en horizontal sin bloquear el desplazamiento vertical
     el.addEventListener('pointerdown', e => { arrastrando = true; xPrevio = e.clientX; el.setPointerCapture(e.pointerId); });
     el.addEventListener('pointermove', e => {
       if (!arrastrando) return;
@@ -3879,6 +3918,9 @@ function leerNumeroCliente(m, e) {
   }
   @media (max-width: 860px) {
     .consola-cuerpo { grid-template-columns: 1fr; }
+    /* en una columna, la orden de Control de Misión va antes del simulador: primero se sabe qué buscar */
+    .consola-lateral { display: contents; }
+    .consola-lateral > .orden { order: -1; }
     .consola-vista { min-height: 380px; }
     .energias { width: 120px; } .energias-graf { height: 90px; }
     .combustible { width: 140px; }
@@ -5721,7 +5763,7 @@ function crearObservatorio(cont, s) {
     <section class="obs-panel">
       <header class="obs-cab">
         <span class="obs-tit">Fotómetro · curva de luz</span>
-        <span class="obs-ayuda">Rueda: ampliar · Arrastrar: desplazar · Clic: marcador</span>
+        <span class="obs-ayuda"><span class="solo-raton">Rueda: ampliar · Arrastrar: desplazar · Clic: marcador</span><span class="solo-tactil">+ / −: ampliar · Arrastrar: desplazar · Toca: marcador</span></span>
         <div class="obs-botones">
           <button type="button" data-acc="menos" aria-label="Reducir">−</button>
           <button type="button" data-acc="mas" aria-label="Ampliar">+</button>
@@ -5735,7 +5777,7 @@ function crearObservatorio(cont, s) {
       <section class="obs-panel">
         <header class="obs-cab">
           <span class="obs-tit">Coronógrafo</span>
-          <span class="obs-ayuda">Arrastra para medir · Flechas: ajuste fino</span>
+          <span class="obs-ayuda">Arrastra para medir<span class="solo-raton"> · Flechas: ajuste fino</span></span>
           <div class="obs-botones"><button type="button" data-acc="regla">Borrar regla</button></div>
         </header>
         <div class="lienzo-caja"><canvas id="lienzo-imagen" tabindex="0" aria-label="Imagen del coronógrafo"></canvas></div>
@@ -5856,6 +5898,7 @@ function crearObservatorio(cont, s) {
     ampliar(ev.deltaY > 0 ? 1.25 : 0.8, tDeX(ev.clientX - r.left));
   }, { passive: false });
   let arrastre = null;
+  lzC.style.touchAction = 'pan-y';          // la curva se desplaza en horizontal; en vertical se mueve la página (el coronógrafo sí bloquea ambas)
   lzC.addEventListener('pointerdown', ev => {
     if (ev.button !== 0) return;
     lzC.setPointerCapture(ev.pointerId);
@@ -5869,6 +5912,8 @@ function crearObservatorio(cont, s) {
     const dt = -dx / (geoC.x1 - geoC.x0) * (arrastre.v1 - arrastre.v0);
     v0 = arrastre.v0 + dt; v1 = arrastre.v1 + dt; limitar(); pintarCurva();
   });
+  // el navegador se queda el gesto (deslizar en vertical con el dedo): sin marcador
+  lzC.addEventListener('pointercancel', () => { arrastre = null; lzC.classList.remove('arrastrando'); });
   lzC.addEventListener('pointerup', ev => {
     if (!arrastre) return;
     const clic = !arrastre.movido;
@@ -6411,7 +6456,7 @@ function crearCajaNegra(cont, s) {
     <section class="obs-panel">
       <header class="obs-cab">
         <span class="obs-tit">Caja negra · velocidad (radar)</span>
-        <span class="obs-ayuda">Rueda: ampliar · Arrastrar: desplazar · Clic: marca</span>
+        <span class="obs-ayuda"><span class="solo-raton">Rueda: ampliar · Arrastrar: desplazar · Clic: marca</span><span class="solo-tactil">+ / −: ampliar · Arrastrar: desplazar · Toca: marca</span></span>
         <div class="obs-botones">
           <button type="button" data-acc="menos" aria-label="Reducir">−</button>
           <button type="button" data-acc="mas" aria-label="Ampliar">+</button>
@@ -6551,6 +6596,7 @@ function crearCajaNegra(cont, s) {
     ampliar(ev.deltaY > 0 ? 1.25 : 0.8, tDeX(ev.clientX - r.left));
   }, { passive: false });
   let arrastre = null;
+  lzT.style.touchAction = 'pan-y';          // con el dedo: arrastrar en horizontal desplaza la gráfica, en vertical la página
   lzT.addEventListener('pointerdown', ev => {
     if (ev.button !== 0) return;
     lzT.setPointerCapture(ev.pointerId);
@@ -6572,6 +6618,8 @@ function crearCajaNegra(cont, s) {
     pintarTele(); pintarCaida(); lecturas();
   });
   lzT.addEventListener('pointerleave', () => { cursor = null; pintarTele(); lecturas(); });
+  // el navegador se queda el gesto (deslizar en vertical con el dedo): sin marca
+  lzT.addEventListener('pointercancel', () => { arrastre = null; lzT.classList.remove('arrastrando'); });
   lzT.addEventListener('pointerup', ev => {
     if (!arrastre) return;
     const clic = !arrastre.movido;
@@ -6832,6 +6880,16 @@ function crearSimCajaNegra(cont, p) {
   @media (max-width: 860px) {
     .consola-vista.con-camara { min-height: 720px; }
     .camara-orbital { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) auto; }
+  }
+  /* teléfono en horizontal: la imagen de la cámara cabe en la pantalla junto con sus controles */
+  /* (la cámara ocupa el alto que deja libre el panel de marcas: en una columna, la caja mide la pantalla más ese
+     panel; en dos columnas, con el panel al lado, lo que mide la pantalla) */
+  @media (max-height: 500px) and (max-width: 860px) {
+    .consola-vista.con-camara { min-height: calc(100vh + 170px); }
+  }
+  @media (max-height: 500px) and (min-width: 861px) {
+    .consola-vista.con-camara { min-height: calc(100vh - 30px); }
+    .consola-cuerpo:has(.con-camara) { align-items: start; }      /* sin estirarse hasta el alto de la columna lateral */
   }
 </style>
 <script>
@@ -7214,7 +7272,7 @@ function crearCamaraOrbital(cont, s) {
     <section class="obs-panel">
       <header class="obs-cab">
         <span class="obs-tit">Cámara orbital · vista desde el polo norte</span>
-        <span class="obs-ayuda">Una imagen cada ${s.pasoMin} min · Flechas: imagen a imagen</span>
+        <span class="obs-ayuda">Una imagen cada ${s.pasoMin} min<span class="solo-raton"> · Flechas: imagen a imagen</span><span class="solo-tactil"> · Botones ◂ ▸: imagen a imagen</span></span>
       </header>
       <div class="lienzo-caja"><canvas id="lienzo-polo"></canvas></div>
       <div class="cam-controles">
@@ -7345,9 +7403,11 @@ function crearCamaraOrbital(cont, s) {
   // arrastrar en la línea de tiempo
   let arrastrando = false;
   const desdeX = ev => { const r = lzL.getBoundingClientRect(); ir(Math.round((ev.clientX - r.left - 6) / (r.width - 12) * (n - 1))); };
+  lzL.style.touchAction = 'pan-y';          // con el dedo: la línea de tiempo se arrastra en horizontal y la página sigue en vertical
   lzL.addEventListener('pointerdown', ev => { arrastrando = true; lzL.setPointerCapture(ev.pointerId); lzL.focus(); desdeX(ev); });
   lzL.addEventListener('pointermove', ev => { if (arrastrando) desdeX(ev); });
   lzL.addEventListener('pointerup', () => { arrastrando = false; });
+  lzL.addEventListener('pointercancel', () => { arrastrando = false; });
   const teclas = ev => {
     if ((ev.target.closest && ev.target.closest('input, textarea')) || !raiz.isConnected) return;
     if (ev.key !== 'ArrowLeft' && ev.key !== 'ArrowRight') return;
@@ -9044,6 +9104,7 @@ if (PRACTICA) {
   b.id = 'btn-nueva-partida';
   b.className = 'btn-reglas';
   b.type = 'button';
+  b.setAttribute('aria-label', 'Empezar una nueva partida');
   b.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v4.5h4.5"/></svg><span>Nueva partida</span>';
   $('#btn-reglas').after(b);
   b.addEventListener('click', async () => {
@@ -9217,7 +9278,7 @@ function pantallaPanel() {
               <article class="ficha" id="ficha" aria-live="polite"></article>
             </div>
           </div>
-          <div class="tablet-marca">MC-7 · Terminal de misión${PRACTICA ? ` · ${CREDITOS}` : ''}</div>
+          <div class="tablet-marca"><span class="marca-terminal">MC-7 · Terminal de misión${PRACTICA ? ' · ' : ''}</span>${PRACTICA ? CREDITOS : ''}</div>
         </div>
         <div class="manos-capa manos-delante" id="manos-delante" aria-hidden="true"></div>
       </div>
