@@ -22,7 +22,8 @@ html = html.replace('  <base target="_top">\n', '');
 html = html.replace('<meta charset="utf-8">', `<meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Misiones orbitales · Modo práctica</title>
-  <meta name="description" content="Misiones de campo gravitatorio para 2.º de Bachillerato: crea tu astronauta y resuelve misiones con simuladores. Modo práctica.">
+  <meta name="description" content="Misiones de campo gravitatorio para 2.º de Bachillerato: crea tu astronauta y resuelve misiones con simuladores. Modo práctica. Por El profe de la bata.">
+  <meta name="author" content="El profe de la bata · https://elprofedelabata.es/">
   <link rel="icon" href="${ICONO}">`);
 let incluidos = 0;
 html = html.replace(/<\?!= include\('(\w+)'\); \?>/g, (_, nombre) => {

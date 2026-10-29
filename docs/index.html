@@ -4,7 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Misiones orbitales · Modo práctica</title>
-  <meta name="description" content="Misiones de campo gravitatorio para 2.º de Bachillerato: crea tu astronauta y resuelve misiones con simuladores. Modo práctica.">
+  <meta name="description" content="Misiones de campo gravitatorio para 2.º de Bachillerato: crea tu astronauta y resuelve misiones con simuladores. Modo práctica. Por El profe de la bata.">
+  <meta name="author" content="El profe de la bata · https://elprofedelabata.es/">
   <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20120%20120%22%3E%3Crect%20width%3D%22120%22%20height%3D%22120%22%20rx%3D%2222%22%20fill%3D%22%23070c1d%22%2F%3E%3Cpolygon%20points%3D%2260%2C10%20103%2C35%20103%2C85%2060%2C110%2017%2C85%2017%2C35%22%20fill%3D%22none%22%20stroke%3D%22%233fe0ff%22%20stroke-width%3D%228%22%2F%3E%3Cpolygon%20points%3D%2260%2C42%2078%2C60%2060%2C78%2042%2C60%22%20fill%3D%22%23ffb92e%22%2F%3E%3C%2Fsvg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -859,6 +860,12 @@
   @media (max-width: 560px) { .final-resumen { grid-template-columns: 1fr; } }
 
   /* Modo práctica (versión web): las misiones completadas se pueden repetir, así que no se tachan */
+  /* créditos de autoría (versión web) */
+  .enlace-creditos { color: var(--hud-ambar); text-decoration: none; pointer-events: auto; }
+  .enlace-creditos:hover { text-decoration: underline; }
+  .modal-caja p.creditos { margin: 14px 0 0; padding-top: 12px; border-top: 1px solid var(--hud-linea); text-align: center;
+    font: 500 11px 'Chakra Petch', sans-serif; letter-spacing: 0.2em; text-transform: uppercase; color: rgba(220, 235, 255, 0.55); }
+
   .practica .lista-item.hecha { cursor: pointer; }
   .practica .lista-item.hecha .li-titulo { color: inherit; text-decoration: none; }
   .practica .lista-item.hecha .li-icono .ico-mision { display: block; }
@@ -8718,6 +8725,8 @@ const app = $('#app');
 // (cuenta el mejor resultado) y la partida se guarda en el navegador. La activa web/partida.js.
 const PRACTICA = !!window.MODO_PRACTICA;
 if (PRACTICA) document.body.classList.add('practica');
+// autoría (solo en la versión web)
+const CREDITOS = '<a class="enlace-creditos" href="https://elprofedelabata.es/" target="_blank" rel="noopener">El profe de la bata</a>';
 
 function llamar(fn) {
   const args = Array.prototype.slice.call(arguments, 1);
@@ -8831,7 +8840,7 @@ function pantallaCarga(subtitulo) {
         <div class="carga-barra"><span></span></div>
         <ul class="carga-log" aria-hidden="true"></ul>
       </div>
-      <div class="carga-pie">Física · 2º Bachillerato · Campo gravitatorio</div>
+      <div class="carga-pie">Física · 2º Bachillerato · Campo gravitatorio${PRACTICA ? ` · Creado por ${CREDITOS}` : ''}</div>
     </div>`;
   const carga = app.querySelector('.carga');
   hiperespacio(carga.querySelector('canvas'));
@@ -9147,7 +9156,8 @@ function mostrarReglas(primeraVez) {
         ? '<li><b>Tu partida se guarda en este navegador.</b> Para empezar de cero, usa el botón <b>Nueva partida</b> de la barra.</li>'
         : '<li><b>Clasificación:</b> en clase se proyecta el <b>puente de mando</b> con la tripulación ordenada por estrellas (si hay empate, va delante quien llegó antes). Solo aparece tu indicativo.</li>'}
       <li>Las acciones importantes (despegar, entregar…) se confirman <b>manteniendo pulsado</b> el botón.</li>
-    </ul>`, [{ texto: primeraVez ? '¡Entendido, a por ellas!' : 'Cerrar', valor: true }], 'modal-ancha');
+    </ul>
+    ${PRACTICA ? `<p class="creditos">Misiones orbitales · creado por ${CREDITOS}</p>` : ''}`, [{ texto: primeraVez ? '¡Entendido, a por ellas!' : 'Cerrar', valor: true }], 'modal-ancha');
 }
 
 /* ------------------------------ Panel ------------------------------ */
@@ -9207,7 +9217,7 @@ function pantallaPanel() {
               <article class="ficha" id="ficha" aria-live="polite"></article>
             </div>
           </div>
-          <div class="tablet-marca">MC-7 · Terminal de misión</div>
+          <div class="tablet-marca">MC-7 · Terminal de misión${PRACTICA ? ` · ${CREDITOS}` : ''}</div>
         </div>
         <div class="manos-capa manos-delante" id="manos-delante" aria-hidden="true"></div>
       </div>

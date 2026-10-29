@@ -1,5 +1,7 @@
 # Misiones orbitales
 
+*Por [El profe de la bata](https://elprofedelabata.es/)*
+
 Actividad gamificada de **campo gravitatorio** para **Física de 2.º de Bachillerato**. Cada alumno crea su astronauta y resuelve misiones en las que tiene que obtener datos de simuladores interactivos (curvas de luz, telemetría, cámaras orbitales…) y calcular un resultado: velocidades orbitales y de escape, leyes de Kepler, energía orbital, órbitas geoestacionarias, la masa de una estrella…
 
 ![Panel de misiones](guia/img/alumno-panel.jpg)
@@ -66,6 +68,10 @@ guia/           Guía para el profesorado (PDF y fuentes)
 - **Versión de clase**: se sube a tu proyecto de Apps Script con [clasp](https://github.com/google/clasp) (`clasp push`). El archivo `.clasp.json` no está en el repositorio: cada uno crea el suyo con su propio proyecto.
 
 Las dos versiones comparten las misiones y la corrección (`src/Misiones.js`), así que puntúan exactamente igual.
+
+## Autoría
+
+Creado por **[El profe de la bata](https://elprofedelabata.es/)**.
 
 ## Licencia
 

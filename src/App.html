@@ -19,6 +19,8 @@ const app = $('#app');
 // (cuenta el mejor resultado) y la partida se guarda en el navegador. La activa web/partida.js.
 const PRACTICA = !!window.MODO_PRACTICA;
 if (PRACTICA) document.body.classList.add('practica');
+// autoría (solo en la versión web)
+const CREDITOS = '<a class="enlace-creditos" href="https://elprofedelabata.es/" target="_blank" rel="noopener">El profe de la bata</a>';
 
 function llamar(fn) {
   const args = Array.prototype.slice.call(arguments, 1);
@@ -132,7 +134,7 @@ function pantallaCarga(subtitulo) {
         <div class="carga-barra"><span></span></div>
         <ul class="carga-log" aria-hidden="true"></ul>
       </div>
-      <div class="carga-pie">Física · 2º Bachillerato · Campo gravitatorio</div>
+      <div class="carga-pie">Física · 2º Bachillerato · Campo gravitatorio${PRACTICA ? ` · Creado por ${CREDITOS}` : ''}</div>
     </div>`;
   const carga = app.querySelector('.carga');
   hiperespacio(carga.querySelector('canvas'));
@@ -448,7 +450,8 @@ function mostrarReglas(primeraVez) {
         ? '<li><b>Tu partida se guarda en este navegador.</b> Para empezar de cero, usa el botón <b>Nueva partida</b> de la barra.</li>'
         : '<li><b>Clasificación:</b> en clase se proyecta el <b>puente de mando</b> con la tripulación ordenada por estrellas (si hay empate, va delante quien llegó antes). Solo aparece tu indicativo.</li>'}
       <li>Las acciones importantes (despegar, entregar…) se confirman <b>manteniendo pulsado</b> el botón.</li>
-    </ul>`, [{ texto: primeraVez ? '¡Entendido, a por ellas!' : 'Cerrar', valor: true }], 'modal-ancha');
+    </ul>
+    ${PRACTICA ? `<p class="creditos">Misiones orbitales · creado por ${CREDITOS}</p>` : ''}`, [{ texto: primeraVez ? '¡Entendido, a por ellas!' : 'Cerrar', valor: true }], 'modal-ancha');
 }
 
 /* ------------------------------ Panel ------------------------------ */
@@ -508,7 +511,7 @@ function pantallaPanel() {
               <article class="ficha" id="ficha" aria-live="polite"></article>
             </div>
           </div>
-          <div class="tablet-marca">MC-7 · Terminal de misión</div>
+          <div class="tablet-marca">MC-7 · Terminal de misión${PRACTICA ? ` · ${CREDITOS}` : ''}</div>
         </div>
         <div class="manos-capa manos-delante" id="manos-delante" aria-hidden="true"></div>
       </div>
