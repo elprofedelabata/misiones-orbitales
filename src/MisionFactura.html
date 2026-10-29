@@ -58,7 +58,7 @@ function pantallaFactura(m) {
         <span class="en-curso">🔒 Misión en curso · no se puede abandonar</span>
       </header>
       <div class="consola-cuerpo">
-        <div class="consola-vista" id="vista">
+        <div class="consola-vista vista-apilada" id="vista">
           <div class="esquinas"><span></span></div>
           <div class="vista-hud vista-telemetria">
             <div class="hud-nombre">Satélite</div>
@@ -245,14 +245,15 @@ function crearSimFactura(cont, p) {
   const ctx = lienzo.getContext('2d');
   let W = 0, H = 0;
   const fondo = Array.from({ length: 170 }, () => ({ x: Math.random(), y: Math.random(), r: Math.random() * 1.1 + 0.2, a: Math.random() * 0.6 + 0.2 }));
+  // se mide el propio lienzo: en escritorio ocupa toda la vista; en el móvil, solo la franja central
   const ajustar = () => {
     const k = Math.min(window.devicePixelRatio || 1, 2);
-    W = cont.clientWidth; H = cont.clientHeight;
+    W = lienzo.clientWidth; H = lienzo.clientHeight;
     lienzo.width = W * k; lienzo.height = H * k;
     ctx.setTransform(k, 0, 0, k, 0, 0);
   };
   const ro = new ResizeObserver(ajustar);
-  ro.observe(cont);
+  ro.observe(lienzo);
   ajustar();
 
   const rasgos = rasgosPolo('Tierra');

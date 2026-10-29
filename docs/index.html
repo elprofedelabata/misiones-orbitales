@@ -3925,6 +3925,22 @@ function leerNumeroCliente(m, e) {
     .energias { width: 120px; } .energias-graf { height: 90px; }
     .combustible { width: 140px; }
   }
+  /* móvil: en las consolas con paneles sobre el dibujo (vista-apilada: E3, O1, E2, K1), los paneles van encima y
+     debajo y el dibujo ocupa su propia franja; superpuestos se pisaban en una pantalla estrecha */
+  @media (max-width: 600px) {
+    .consola-vista.vista-apilada { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto 300px auto;
+      align-items: start; gap: 8px 12px; padding: 14px 14px 12px; min-height: 0; }
+    .vista-apilada > canvas { position: relative; inset: auto; grid-row: 2; grid-column: 1 / -1; width: calc(100% + 28px); height: 300px; margin: 0 -14px; }
+    .vista-apilada > .vista-hud, .vista-apilada > .combustible, .vista-apilada > .energias, .vista-apilada > .barras-fac { position: static; }
+    .vista-apilada > .vista-telemetria { grid-row: 1; grid-column: 1; }
+    .vista-apilada > .vista-fase, .vista-apilada > .vista-ficha-fac, .vista-apilada > .vista-ficha-ast { grid-row: 1; grid-column: 2; }
+    .vista-apilada > .vista-nave, .vista-apilada > .combustible, .vista-apilada > .barras-fac { grid-row: 3; grid-column: 1; align-self: end; width: auto; }
+    .vista-apilada > .energias { grid-row: 3; grid-column: 2; width: 116px; padding: 8px 10px 6px; }
+    .vista-apilada .energias-graf { height: 70px; }
+    .vista-apilada > .vista-mensaje { grid-row: 2; grid-column: 1 / -1; align-self: end; margin-bottom: 10px; font-size: 12px; }
+    .vista-apilada .vista-hud, .vista-apilada .hud-dato, .vista-apilada .hud-nombre { font-size: 11.5px; line-height: 1.5; }
+    .vista-apilada .fase { font-size: 11px; letter-spacing: 0.12em; }
+  }
 </style>
 <script>
 /* =====================================================================
@@ -3953,7 +3969,7 @@ function pantallaAscenso(m) {
         <span class="en-curso">🔒 Misión en curso · no se puede abandonar</span>
       </header>
       <div class="consola-cuerpo">
-        <div class="consola-vista" id="vista">
+        <div class="consola-vista vista-apilada" id="vista">
           <div class="esquinas"><span></span></div>
           <div class="vista-hud vista-telemetria" id="telemetria"></div>
           <div class="vista-hud vista-fase">
@@ -4180,14 +4196,15 @@ function crearSimAscenso(cont, p) {
   const ctx = lienzo.getContext('2d');
   let W = 0, H = 0;
   const estrellasFondo = Array.from({ length: 160 }, () => ({ x: Math.random(), y: Math.random(), r: Math.random() * 1.1 + 0.2, a: Math.random() * 0.6 + 0.2 }));
+  // se mide el propio lienzo: en escritorio ocupa toda la vista; en el móvil, solo la franja central
   const ajustar = () => {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    W = cont.clientWidth; H = cont.clientHeight;
+    W = lienzo.clientWidth; H = lienzo.clientHeight;
     lienzo.width = W * dpr; lienzo.height = H * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   };
   const ro = new ResizeObserver(ajustar);
-  ro.observe(cont);
+  ro.observe(lienzo);
   ajustar();
 
   const Rn = p.R / p.r1, r2n = p.r2 / p.r1;
@@ -4426,7 +4443,7 @@ function pantallaAcoplamiento(m) {
         <span class="en-curso">🔒 Misión en curso · no se puede abandonar</span>
       </header>
       <div class="consola-cuerpo">
-        <div class="consola-vista" id="vista">
+        <div class="consola-vista vista-apilada" id="vista">
           <div class="esquinas"><span></span></div>
           <div class="vista-hud vista-telemetria" id="telemetria"></div>
           <div class="vista-hud vista-fase">
@@ -4596,14 +4613,15 @@ function crearSimAcoplamiento(cont, p) {
   const ctx = lienzo.getContext('2d');
   let W = 0, H = 0;
   const fondo = Array.from({ length: 160 }, () => ({ x: Math.random(), y: Math.random(), r: Math.random() * 1.1 + 0.2, a: Math.random() * 0.6 + 0.2 }));
+  // se mide el propio lienzo: en escritorio ocupa toda la vista; en el móvil, solo la franja central
   const ajustar = () => {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    W = cont.clientWidth; H = cont.clientHeight;
+    W = lienzo.clientWidth; H = lienzo.clientHeight;
     lienzo.width = W * dpr; lienzo.height = H * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   };
   const ro = new ResizeObserver(ajustar);
-  ro.observe(cont);
+  ro.observe(lienzo);
   ajustar();
 
   const Rn = p.R / p.r;
@@ -7621,7 +7639,7 @@ function pantallaKepler(m) {
         <span class="en-curso">🔒 Misión en curso · no se puede abandonar</span>
       </header>
       <div class="consola-cuerpo">
-        <div class="consola-vista" id="vista">
+        <div class="consola-vista vista-apilada" id="vista">
           <div class="esquinas"><span></span></div>
           <div class="vista-hud vista-telemetria" id="telemetria">
             <div class="hud-nombre">${esc(s.planeta)}</div>
@@ -7793,14 +7811,15 @@ function crearSimKepler(cont, p) {
   const ctx = lienzo.getContext('2d');
   let W = 0, H = 0;
   const fondo = Array.from({ length: 170 }, () => ({ x: Math.random(), y: Math.random(), r: Math.random() * 1.1 + 0.2, a: Math.random() * 0.6 + 0.2 }));
+  // se mide el propio lienzo: en escritorio ocupa toda la vista; en el móvil, solo la franja central
   const ajustar = () => {
     const k = Math.min(window.devicePixelRatio || 1, 2);
-    W = cont.clientWidth; H = cont.clientHeight;
+    W = lienzo.clientWidth; H = lienzo.clientHeight;
     lienzo.width = W * k; lienzo.height = H * k;
     ctx.setTransform(k, 0, 0, k, 0, 0);
   };
   const ro = new ResizeObserver(ajustar);
-  ro.observe(cont);
+  ro.observe(lienzo);
   ajustar();
 
   const elFase = $('#fase');
@@ -7964,7 +7983,7 @@ function pantallaFactura(m) {
         <span class="en-curso">🔒 Misión en curso · no se puede abandonar</span>
       </header>
       <div class="consola-cuerpo">
-        <div class="consola-vista" id="vista">
+        <div class="consola-vista vista-apilada" id="vista">
           <div class="esquinas"><span></span></div>
           <div class="vista-hud vista-telemetria">
             <div class="hud-nombre">Satélite</div>
@@ -8151,14 +8170,15 @@ function crearSimFactura(cont, p) {
   const ctx = lienzo.getContext('2d');
   let W = 0, H = 0;
   const fondo = Array.from({ length: 170 }, () => ({ x: Math.random(), y: Math.random(), r: Math.random() * 1.1 + 0.2, a: Math.random() * 0.6 + 0.2 }));
+  // se mide el propio lienzo: en escritorio ocupa toda la vista; en el móvil, solo la franja central
   const ajustar = () => {
     const k = Math.min(window.devicePixelRatio || 1, 2);
-    W = cont.clientWidth; H = cont.clientHeight;
+    W = lienzo.clientWidth; H = lienzo.clientHeight;
     lienzo.width = W * k; lienzo.height = H * k;
     ctx.setTransform(k, 0, 0, k, 0, 0);
   };
   const ro = new ResizeObserver(ajustar);
-  ro.observe(cont);
+  ro.observe(lienzo);
   ajustar();
 
   const rasgos = rasgosPolo('Tierra');
