@@ -146,13 +146,58 @@
     body.vista-consola .consola-vista { min-height: 0; }
   }
   @media (max-width: 860px) {
+    .energias { width: 120px; } .energias-graf { height: 90px; }
+    .combustible { width: 140px; }
+  }
+  /* una columna (móvil o tablet en vertical) */
+  @media (max-width: 860px) and (min-height: 501px) {
     .consola-cuerpo { grid-template-columns: 1fr; }
-    /* en una columna, la orden de Control de Misión va antes del simulador: primero se sabe qué buscar */
+    /* la orden de Control de Misión va antes del simulador: primero se sabe qué buscar */
     .consola-lateral { display: contents; }
     .consola-lateral > .orden { order: -1; }
     .consola-vista { min-height: 380px; }
-    .energias { width: 120px; } .energias-graf { height: 90px; }
-    .combustible { width: 140px; }
+  }
+  /* móvil en horizontal: el simulador a la izquierda, quieto y entero mientras se desplaza la columna de la orden y la respuesta */
+  @media (max-height: 500px) {
+    .consola { gap: 8px; }
+    .consola-icono { width: 40px; height: 45px; font-size: 20px; }
+    /* cabecera en una sola fila: si no cabe, se recortan el subtítulo y el aviso */
+    .consola-cab { flex-wrap: nowrap; gap: 10px; }
+    .consola-cab > * { flex: none; min-width: 0; }
+    .consola-cab > div { flex: 0 1 auto; }
+    .consola-kicker { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .consola-cab h1 { font-size: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .consola-cab .en-curso { flex: 0 1 auto; padding: 4px 10px; font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .consola-cuerpo { grid-template-columns: minmax(0, 1.6fr) minmax(270px, 1fr); align-items: start; gap: 10px; }
+    .consola-vista { position: sticky; top: 8px; height: calc(100vh - 16px); height: calc(100svh - 16px); min-height: 0; }
+    .consola-lateral { overflow: visible; }
+    .vista-hud, .hud-dato { font-size: 11.5px; line-height: 1.5; }
+    .vista-telemetria { top: 10px; left: 12px; }
+    .vista-fase { top: 10px; right: 12px; max-width: 50%; }
+    .vista-fase .fase { font-size: 11px; letter-spacing: 0.12em; }
+    .vista-mensaje { bottom: 10px; font-size: 12px; }
+    .energias { right: 12px; bottom: 34px; width: 104px; padding: 6px 8px 4px; }
+    .energias-graf { height: 56px; gap: 8px; }
+    .energias-leyenda { gap: 8px; }
+    .combustible { left: 12px; bottom: 34px; width: 150px; }
+    /* la respuesta en una sola fila: la casilla de la mantisa se ajusta al hueco */
+    .maniobra-entrada { flex-wrap: nowrap; gap: 6px; }
+    .maniobra-entrada > * { flex: none; }
+    .maniobra-entrada input { min-width: 0; padding: 7px 8px; font-size: 15px; }
+    .maniobra-entrada .in-mantisa { flex: 1 1 96px; width: auto; max-width: 110px; }
+    .maniobra-entrada .in-exp { width: 48px; }
+    .maniobra-entrada .por-diez, .maniobra-entrada .unidad { font-size: 14px; }
+    /* los simuladores con instrumentos (vista-instrumentos: K3, G1, X1) se llevan más ancho */
+    .consola-cuerpo:has(.vista-instrumentos) { grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr); }
+    /* con el informe, el ancho es para el informe (el simulador queda de fondo) */
+    .consola-cuerpo.resultado, .consola-cuerpo.resultado:has(.vista-instrumentos) { grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); }
+  }
+  /* móvil pequeño en horizontal: a dos columnas no caben los instrumentos; van a lo ancho, con la orden encima */
+  @media (max-height: 500px) and (max-width: 760px) {
+    .consola-cuerpo:has(.vista-instrumentos), .consola-cuerpo.resultado:has(.vista-instrumentos) { grid-template-columns: 1fr; }
+    .consola-cuerpo:has(.vista-instrumentos) .consola-vista { position: relative; top: auto; }
+    .consola-cuerpo:has(.vista-instrumentos) .consola-lateral { display: contents; }
+    .consola-cuerpo:has(.vista-instrumentos) .consola-lateral > .orden { order: -1; }
   }
   /* móvil: en las consolas con paneles sobre el dibujo (vista-apilada: E3, O1, E2, K1), los paneles van encima y
      debajo y el dibujo ocupa su propia franja; superpuestos se pisaban en una pantalla estrecha */

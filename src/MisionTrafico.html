@@ -22,6 +22,17 @@
   .ficha-sat .btn-marcar.hecho { background: var(--hud-ambar); color: #1a1100; }
   #lienzo-radar { cursor: pointer; }
   .vista-radar ~ .vista-telemetria { top: 132px; }
+  /* móvil en horizontal: la ficha del satélite, más pequeña, tapa menos radar */
+  @media (max-height: 500px) {
+    .vista-radar { top: 10px; left: 12px; }
+    .vista-radar .fase { font-size: 11px; letter-spacing: 0.12em; }
+    .ficha-sat { left: 8px; bottom: 8px; width: 196px; padding: 6px 8px 8px; }
+    .ficha-sat .pestanas { margin-bottom: 4px; }
+    .ficha-sat .pestanas button { height: 22px; font-size: 10px; }
+    .ficha-sat dl { margin-bottom: 6px; font-size: 11px; }
+    .ficha-sat dt, .ficha-sat dd { padding: 1px 0; }
+    .ficha-sat .btn-marcar { height: 26px; font-size: 10px; }
+  }
 </style>
 <script>
 /* =====================================================================

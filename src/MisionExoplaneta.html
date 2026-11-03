@@ -32,10 +32,30 @@
   .lectura small { font: 10.5px 'Share Tech Mono', monospace; color: rgba(220,235,255,0.4); }
   .datos-exo { display: grid; gap: 2px; margin-top: 8px; }
 
-  @media (max-width: 860px) {
+  @media (max-width: 860px) and (min-height: 501px) {
     .consola-vista.con-observatorio { min-height: 760px; }
     .obs-abajo { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) auto; }
     .obs-lecturas { display: grid; grid-template-columns: 1fr 1fr; }
+  }
+  /* móvil en horizontal: los paneles, lado a lado y con las cabeceras más bajas (también los de O3 y G1) */
+  @media (max-height: 500px) {
+    .observatorio { inset: 8px; grid-template-rows: minmax(0, 1fr); grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 8px; }
+    .obs-cab { gap: 4px 8px; padding: 4px 8px; }
+    .obs-tit { font-size: 10px; letter-spacing: 0.14em; }
+    .obs-ayuda { font-size: 10px; }
+    .obs-botones { flex-wrap: wrap; justify-content: flex-end; }
+    .obs-botones button, .obs-tiempo button { min-width: 26px; height: 22px; padding: 0 6px; font-size: 10px; white-space: nowrap; }
+    .obs-tiempo { gap: 4px; padding: 4px 6px; }
+    .obs-tiempo input[type=range] { min-width: 0; }
+    .obs-lecturas { padding: 4px 8px; }
+    .lectura { padding: 3px 0 4px; }
+    .lectura b, .lectura.grande b { font-size: 13px; }
+    /* K3: el fotómetro con las lecturas debajo y el coronógrafo a todo el alto */
+    .observatorio:has(> .obs-abajo) { grid-template-rows: minmax(0, 1fr) auto; }
+    .obs-abajo { display: contents; }
+    .obs-abajo > .obs-panel:first-child { grid-column: 2; grid-row: 1 / span 2; }
+    .obs-abajo .obs-lecturas { grid-column: 1; grid-row: 2; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 10px; }
+    .obs-abajo .lectura > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   }
 </style>
 <script>
@@ -65,7 +85,7 @@ function pantallaExoplaneta(m) {
         <span class="en-curso">🔒 Misión en curso · no se puede abandonar</span>
       </header>
       <div class="consola-cuerpo">
-        <div class="consola-vista con-observatorio" id="vista">
+        <div class="consola-vista con-observatorio vista-instrumentos" id="vista">
           <div class="vista-hud vista-telemetria" id="telemetria" hidden></div>
           <div class="vista-hud vista-fase" id="hud-fase" hidden><div class="fase" id="fase"></div><div class="hud-nombre">${esc(s.estrella)} b</div></div>
           <div class="vista-hud vista-mensaje" id="mensaje"></div>

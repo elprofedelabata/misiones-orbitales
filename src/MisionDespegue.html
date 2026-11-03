@@ -62,11 +62,31 @@
     .mundo-ficha { font-size: 12px; }
     .mundo-ficha dt, .mundo-ficha dd { padding: 3px 0; }
   }
-  @media (max-width: 860px) {
+  @media (max-width: 860px) and (min-height: 501px) {
     .consola-vista.con-catalogo { min-height: 560px; }
+  }
+  @media (max-width: 860px) {
     .catalogo-escena { inset: 58px 56px 46px; }
     .mundo-carta { width: min(300px, 70%); }
     .carrusel-flecha.izq { left: 6px; } .carrusel-flecha.der { right: 6px; }
+  }
+  /* móvil en horizontal: la carta del mundo, más ancha y más baja, para que quepa entera */
+  @media (max-height: 500px) {
+    .vista-catalogo { top: 10px; left: 12px; }
+    .vista-catalogo .fase { font-size: 11px; letter-spacing: 0.12em; }
+    .catalogo-escena { inset: 44px 50px 28px; }
+    .mundo-carta { width: min(300px, 74%); display: grid; grid-template-columns: 56px minmax(0, 1fr); align-items: center; gap: 5px 12px;
+      padding: 9px 12px 11px; overflow-y: auto; scrollbar-width: none; }
+    .mundo-cab, .mundo-ficha, .btn-fijar { grid-column: 1 / -1; }
+    .consola-vista .mundo-lienzo { width: 56px; aspect-ratio: 1; }
+    .mundo-nombre { font-size: 17px; }
+    .mundo-ficha { font: 11px/1.2 'Share Tech Mono', monospace; }
+    .mundo-ficha dt, .mundo-ficha dd { padding: 2px 0; }
+    .mundo-ficha dt { white-space: nowrap; }
+    .btn-fijar { margin-top: 2px; min-height: 30px; font-size: 11px; }
+    .carrusel-flecha { width: 36px; height: 44px; margin-top: -22px; }
+    .carrusel-flecha.izq { left: 6px; } .carrusel-flecha.der { right: 6px; }
+    .carrusel-pie { bottom: 8px; font-size: 11px; }
   }
 </style>
 <script>
@@ -100,7 +120,7 @@ function pantallaDespegue(m) {
         <span class="en-curso">🔒 Misión en curso · no se puede abandonar</span>
       </header>
       <div class="consola-cuerpo">
-        <div class="consola-vista con-catalogo" id="vista">
+        <div class="consola-vista con-catalogo vista-instrumentos" id="vista">
           <div class="esquinas"><span></span></div>
           <div class="vista-hud vista-catalogo" id="hud-catalogo">
             <div class="fase">Catálogo de aterrizaje</div>

@@ -517,10 +517,13 @@
   .btn-mantener.activo .txt, .btn-mantener.activo .icono { color: #1a1100; mix-blend-mode: normal; }
   .btn-mantener.hecho { background: var(--hud-ambar); color: #1a1100; }
 
-  @media (max-width: 860px) {
+  /* una columna: pantalla estrecha y alta (móvil o tablet en vertical); el móvil en horizontal usa dos (ver más abajo) */
+  @media (max-width: 860px) and (min-height: 501px) {
     .mod { grid-template-columns: 1fr; grid-template-rows: 420px auto; }
     .mod-panel { height: auto; overflow: visible; }
     .mod-cuerpo { overflow: visible; }
+  }
+  @media (max-width: 860px) {
     .mod-cab, .mod-cuerpo { padding-left: 16px; padding-right: 16px; }
     .mod-tabs { padding: 12px 16px 0; }
     .mod-desc { margin: 0 16px; }
@@ -734,15 +737,19 @@
   @media (max-width: 860px) {
     .quest-escena { padding: 0; animation: none; }
     .manos-capa { display: none; }
-    .tablet { height: auto; padding: 16px 12px 28px; border-radius: 24px; }
+    .tablet { padding: 16px 12px 28px; border-radius: 24px; }
     .goma { width: 40px; height: 40px; border-width: 5px; }
     .tornillo.t1, .tornillo.t2 { display: none; }
+    .ficha-titulo { font-size: 22px; }
+  }
+  /* una columna: la ficha debajo de la lista */
+  @media (max-width: 860px) and (min-height: 501px) {
+    .tablet { height: auto; }
     .pantalla { height: auto; }
     .pantalla-cuerpo { grid-template-columns: 1fr; }
     /* la lista entera, sin desplazamiento propio (dentro de otra página que ya se desplaza era incómoda) */
     .lista { max-height: none; overflow: visible; border-right: 0; border-bottom: 1px solid var(--hud-linea); }
     .ficha { overflow: visible; padding: 18px 16px; }
-    .ficha-titulo { font-size: 22px; }
     .ficha-contenido { grid-template-columns: 1fr; }
     .ficha-imagen { aspect-ratio: 4 / 3; max-width: 360px; }
   }
@@ -878,12 +885,75 @@
     .practica .marca-terminal { display: none; }
   }
 
+  /* ---------------- Móvil en horizontal (pantalla baja): dos columnas, como en el ordenador ---------------- */
+  @media (max-height: 500px) {
+    .app { padding: 8px 12px 20px; }
+
+    /* panel: la tablet ocupa el alto de la pantalla; la lista y la ficha se desplazan por dentro */
+    body.vista-panel { height: 100vh; height: 100svh; overflow: hidden; display: flex; flex-direction: column; }
+    body.vista-panel .barra { flex: none; }
+    body.vista-panel .app { flex: 1; min-height: 0; width: 100%; display: flex; flex-direction: column; padding-top: 6px; padding-bottom: 6px; }
+    body.vista-panel .quest { flex: 1; min-height: 0; display: flex; flex-direction: column; padding-top: 0; }
+    .quest-escena { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 0; animation: none; }
+    .manos-capa { display: none; }
+    .tablet { flex: 1; min-height: 0; height: auto; padding: 6px 6px 22px; border-radius: 16px; }
+    .tablet-marca { bottom: 5px; }
+    .pantalla-cab { display: none; }      /* sin cabecera: el alto es para la lista y la ficha */
+    .pantalla-cuerpo { grid-template-columns: minmax(210px, 0.75fr) minmax(0, 1.4fr); }
+    .ficha-contenido, .ficha.muy-compacta .ficha-contenido { grid-template-columns: minmax(0, 1fr) 27%; gap: 12px; }
+    .lista { padding: 6px 6px 10px; }
+    .lista-item { padding: 5px 8px; }
+    .ficha { padding: 12px 16px 0; gap: 10px; }
+    .ficha-titulo { font-size: 20px; }
+    .ficha.muy-compacta .lore p:last-child { display: block; }      /* la ficha se desplaza: no hace falta esconder nada */
+    /* el botón de despegar, siempre a mano al pie de la ficha */
+    .ficha .ficha-accion, .ficha.muy-compacta .ficha-accion { position: sticky; bottom: 0; z-index: 1; margin-top: auto; padding: 12px 0 10px;
+      background: linear-gradient(180deg, rgba(7, 12, 29, 0), #070c1d 10px); }
+
+    /* editor del astronauta: el astronauta a la izquierda (quieto al desplazar) y las opciones a la derecha */
+    .mod { grid-template-columns: minmax(0, 0.75fr) minmax(0, 1.25fr); grid-template-rows: auto; align-items: start; gap: 10px; }
+    .mod-escena { position: sticky; top: 8px; height: calc(100vh - 16px); height: calc(100svh - 16px); }
+    .mod-panel { height: auto; overflow: visible; }
+    .mod-cuerpo { overflow: visible; }
+    .mod-cab { padding: 14px 16px 10px; }
+    .mod-cab h1 { font-size: 20px; }
+    .mod-tabs { padding: 10px 16px 0; }
+    .mod-tab-txt { display: none; }          /* solo el icono (el nombre aparece debajo, en la sección) */
+    .mod-tab { padding: 12px 0 8px; }
+    .mod-hud { left: 14px; right: 14px; }
+    .mod-hud-sup { top: 12px; }
+    .mod-hud-inf { bottom: 12px; }
+    .mod-hud-inf .mod-dato { display: none; }
+
+    /* ventanas: aprovechan el alto */
+    .modal { padding: 8px; }
+    .modal-caja { max-height: calc(100vh - 16px); max-height: calc(100svh - 16px); padding: 18px 20px 16px; }
+  }
+
   /* textos de ayuda según se use ratón o pantalla táctil */
   .solo-tactil { display: none; }
   @media (hover: none) and (pointer: coarse) {
     .solo-raton { display: none; }
     .solo-tactil { display: inline; }
   }
+
+  /* Versión web: con el móvil en vertical, un aviso pide girarlo (la app sigue debajo, tal como estaba) */
+  .girar { display: none; }
+  @media (orientation: portrait) and (max-width: 600px) and (hover: none) and (pointer: coarse) {
+    .girar { position: fixed; inset: 0; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+      padding: 24px; text-align: center; touch-action: none;
+      background: radial-gradient(circle at 50% 42%, rgba(63, 224, 255, 0.13), transparent 58%), var(--hud-oscuro); }
+  }
+  .girar-icono { width: 128px; height: 128px; margin-bottom: 8px; }
+  .girar-icono svg { width: 100%; height: 100%; overflow: visible; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+  .girar-flecha { stroke: var(--hud-ambar); stroke-width: 2.5; }
+  .girar-movil { stroke: var(--hud-cian); stroke-width: 3; transform-origin: 60px 60px; animation: girarMovil 2.8s ease-in-out infinite;
+    filter: drop-shadow(0 0 6px rgba(63, 224, 255, 0.55)); }
+  .girar-movil .pantallita { fill: rgba(63, 224, 255, 0.12); stroke-width: 0; }
+  @keyframes girarMovil { 0%, 18% { transform: rotate(0); } 48%, 82% { transform: rotate(-90deg); } 100% { transform: rotate(0); } }
+  .girar-titulo { font: 700 21px 'Chakra Petch', sans-serif; letter-spacing: 0.2em; text-transform: uppercase; color: var(--hud-blanco); }
+  .girar-texto { margin: 0; max-width: 290px; font-size: 15px; color: rgba(220, 235, 255, 0.75); }
+  .girar .enlace-creditos { position: absolute; bottom: 22px; font: 600 11px 'Chakra Petch', sans-serif; letter-spacing: 0.3em; text-transform: uppercase; }
 
   /* créditos de autoría (versión web) */
   .enlace-creditos { color: var(--hud-ambar); text-decoration: none; pointer-events: auto; }

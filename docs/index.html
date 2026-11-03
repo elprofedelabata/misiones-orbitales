@@ -530,10 +530,13 @@
   .btn-mantener.activo .txt, .btn-mantener.activo .icono { color: #1a1100; mix-blend-mode: normal; }
   .btn-mantener.hecho { background: var(--hud-ambar); color: #1a1100; }
 
-  @media (max-width: 860px) {
+  /* una columna: pantalla estrecha y alta (móvil o tablet en vertical); el móvil en horizontal usa dos (ver más abajo) */
+  @media (max-width: 860px) and (min-height: 501px) {
     .mod { grid-template-columns: 1fr; grid-template-rows: 420px auto; }
     .mod-panel { height: auto; overflow: visible; }
     .mod-cuerpo { overflow: visible; }
+  }
+  @media (max-width: 860px) {
     .mod-cab, .mod-cuerpo { padding-left: 16px; padding-right: 16px; }
     .mod-tabs { padding: 12px 16px 0; }
     .mod-desc { margin: 0 16px; }
@@ -747,15 +750,19 @@
   @media (max-width: 860px) {
     .quest-escena { padding: 0; animation: none; }
     .manos-capa { display: none; }
-    .tablet { height: auto; padding: 16px 12px 28px; border-radius: 24px; }
+    .tablet { padding: 16px 12px 28px; border-radius: 24px; }
     .goma { width: 40px; height: 40px; border-width: 5px; }
     .tornillo.t1, .tornillo.t2 { display: none; }
+    .ficha-titulo { font-size: 22px; }
+  }
+  /* una columna: la ficha debajo de la lista */
+  @media (max-width: 860px) and (min-height: 501px) {
+    .tablet { height: auto; }
     .pantalla { height: auto; }
     .pantalla-cuerpo { grid-template-columns: 1fr; }
     /* la lista entera, sin desplazamiento propio (dentro de otra página que ya se desplaza era incómoda) */
     .lista { max-height: none; overflow: visible; border-right: 0; border-bottom: 1px solid var(--hud-linea); }
     .ficha { overflow: visible; padding: 18px 16px; }
-    .ficha-titulo { font-size: 22px; }
     .ficha-contenido { grid-template-columns: 1fr; }
     .ficha-imagen { aspect-ratio: 4 / 3; max-width: 360px; }
   }
@@ -891,12 +898,75 @@
     .practica .marca-terminal { display: none; }
   }
 
+  /* ---------------- Móvil en horizontal (pantalla baja): dos columnas, como en el ordenador ---------------- */
+  @media (max-height: 500px) {
+    .app { padding: 8px 12px 20px; }
+
+    /* panel: la tablet ocupa el alto de la pantalla; la lista y la ficha se desplazan por dentro */
+    body.vista-panel { height: 100vh; height: 100svh; overflow: hidden; display: flex; flex-direction: column; }
+    body.vista-panel .barra { flex: none; }
+    body.vista-panel .app { flex: 1; min-height: 0; width: 100%; display: flex; flex-direction: column; padding-top: 6px; padding-bottom: 6px; }
+    body.vista-panel .quest { flex: 1; min-height: 0; display: flex; flex-direction: column; padding-top: 0; }
+    .quest-escena { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 0; animation: none; }
+    .manos-capa { display: none; }
+    .tablet { flex: 1; min-height: 0; height: auto; padding: 6px 6px 22px; border-radius: 16px; }
+    .tablet-marca { bottom: 5px; }
+    .pantalla-cab { display: none; }      /* sin cabecera: el alto es para la lista y la ficha */
+    .pantalla-cuerpo { grid-template-columns: minmax(210px, 0.75fr) minmax(0, 1.4fr); }
+    .ficha-contenido, .ficha.muy-compacta .ficha-contenido { grid-template-columns: minmax(0, 1fr) 27%; gap: 12px; }
+    .lista { padding: 6px 6px 10px; }
+    .lista-item { padding: 5px 8px; }
+    .ficha { padding: 12px 16px 0; gap: 10px; }
+    .ficha-titulo { font-size: 20px; }
+    .ficha.muy-compacta .lore p:last-child { display: block; }      /* la ficha se desplaza: no hace falta esconder nada */
+    /* el botón de despegar, siempre a mano al pie de la ficha */
+    .ficha .ficha-accion, .ficha.muy-compacta .ficha-accion { position: sticky; bottom: 0; z-index: 1; margin-top: auto; padding: 12px 0 10px;
+      background: linear-gradient(180deg, rgba(7, 12, 29, 0), #070c1d 10px); }
+
+    /* editor del astronauta: el astronauta a la izquierda (quieto al desplazar) y las opciones a la derecha */
+    .mod { grid-template-columns: minmax(0, 0.75fr) minmax(0, 1.25fr); grid-template-rows: auto; align-items: start; gap: 10px; }
+    .mod-escena { position: sticky; top: 8px; height: calc(100vh - 16px); height: calc(100svh - 16px); }
+    .mod-panel { height: auto; overflow: visible; }
+    .mod-cuerpo { overflow: visible; }
+    .mod-cab { padding: 14px 16px 10px; }
+    .mod-cab h1 { font-size: 20px; }
+    .mod-tabs { padding: 10px 16px 0; }
+    .mod-tab-txt { display: none; }          /* solo el icono (el nombre aparece debajo, en la sección) */
+    .mod-tab { padding: 12px 0 8px; }
+    .mod-hud { left: 14px; right: 14px; }
+    .mod-hud-sup { top: 12px; }
+    .mod-hud-inf { bottom: 12px; }
+    .mod-hud-inf .mod-dato { display: none; }
+
+    /* ventanas: aprovechan el alto */
+    .modal { padding: 8px; }
+    .modal-caja { max-height: calc(100vh - 16px); max-height: calc(100svh - 16px); padding: 18px 20px 16px; }
+  }
+
   /* textos de ayuda según se use ratón o pantalla táctil */
   .solo-tactil { display: none; }
   @media (hover: none) and (pointer: coarse) {
     .solo-raton { display: none; }
     .solo-tactil { display: inline; }
   }
+
+  /* Versión web: con el móvil en vertical, un aviso pide girarlo (la app sigue debajo, tal como estaba) */
+  .girar { display: none; }
+  @media (orientation: portrait) and (max-width: 600px) and (hover: none) and (pointer: coarse) {
+    .girar { position: fixed; inset: 0; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+      padding: 24px; text-align: center; touch-action: none;
+      background: radial-gradient(circle at 50% 42%, rgba(63, 224, 255, 0.13), transparent 58%), var(--hud-oscuro); }
+  }
+  .girar-icono { width: 128px; height: 128px; margin-bottom: 8px; }
+  .girar-icono svg { width: 100%; height: 100%; overflow: visible; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+  .girar-flecha { stroke: var(--hud-ambar); stroke-width: 2.5; }
+  .girar-movil { stroke: var(--hud-cian); stroke-width: 3; transform-origin: 60px 60px; animation: girarMovil 2.8s ease-in-out infinite;
+    filter: drop-shadow(0 0 6px rgba(63, 224, 255, 0.55)); }
+  .girar-movil .pantallita { fill: rgba(63, 224, 255, 0.12); stroke-width: 0; }
+  @keyframes girarMovil { 0%, 18% { transform: rotate(0); } 48%, 82% { transform: rotate(-90deg); } 100% { transform: rotate(0); } }
+  .girar-titulo { font: 700 21px 'Chakra Petch', sans-serif; letter-spacing: 0.2em; text-transform: uppercase; color: var(--hud-blanco); }
+  .girar-texto { margin: 0; max-width: 290px; font-size: 15px; color: rgba(220, 235, 255, 0.75); }
+  .girar .enlace-creditos { position: absolute; bottom: 22px; font: 600 11px 'Chakra Petch', sans-serif; letter-spacing: 0.3em; text-transform: uppercase; }
 
   /* créditos de autoría (versión web) */
   .enlace-creditos { color: var(--hud-ambar); text-decoration: none; pointer-events: auto; }
@@ -3917,13 +3987,58 @@ function leerNumeroCliente(m, e) {
     body.vista-consola .consola-vista { min-height: 0; }
   }
   @media (max-width: 860px) {
+    .energias { width: 120px; } .energias-graf { height: 90px; }
+    .combustible { width: 140px; }
+  }
+  /* una columna (móvil o tablet en vertical) */
+  @media (max-width: 860px) and (min-height: 501px) {
     .consola-cuerpo { grid-template-columns: 1fr; }
-    /* en una columna, la orden de Control de Misión va antes del simulador: primero se sabe qué buscar */
+    /* la orden de Control de Misión va antes del simulador: primero se sabe qué buscar */
     .consola-lateral { display: contents; }
     .consola-lateral > .orden { order: -1; }
     .consola-vista { min-height: 380px; }
-    .energias { width: 120px; } .energias-graf { height: 90px; }
-    .combustible { width: 140px; }
+  }
+  /* móvil en horizontal: el simulador a la izquierda, quieto y entero mientras se desplaza la columna de la orden y la respuesta */
+  @media (max-height: 500px) {
+    .consola { gap: 8px; }
+    .consola-icono { width: 40px; height: 45px; font-size: 20px; }
+    /* cabecera en una sola fila: si no cabe, se recortan el subtítulo y el aviso */
+    .consola-cab { flex-wrap: nowrap; gap: 10px; }
+    .consola-cab > * { flex: none; min-width: 0; }
+    .consola-cab > div { flex: 0 1 auto; }
+    .consola-kicker { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .consola-cab h1 { font-size: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .consola-cab .en-curso { flex: 0 1 auto; padding: 4px 10px; font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .consola-cuerpo { grid-template-columns: minmax(0, 1.6fr) minmax(270px, 1fr); align-items: start; gap: 10px; }
+    .consola-vista { position: sticky; top: 8px; height: calc(100vh - 16px); height: calc(100svh - 16px); min-height: 0; }
+    .consola-lateral { overflow: visible; }
+    .vista-hud, .hud-dato { font-size: 11.5px; line-height: 1.5; }
+    .vista-telemetria { top: 10px; left: 12px; }
+    .vista-fase { top: 10px; right: 12px; max-width: 50%; }
+    .vista-fase .fase { font-size: 11px; letter-spacing: 0.12em; }
+    .vista-mensaje { bottom: 10px; font-size: 12px; }
+    .energias { right: 12px; bottom: 34px; width: 104px; padding: 6px 8px 4px; }
+    .energias-graf { height: 56px; gap: 8px; }
+    .energias-leyenda { gap: 8px; }
+    .combustible { left: 12px; bottom: 34px; width: 150px; }
+    /* la respuesta en una sola fila: la casilla de la mantisa se ajusta al hueco */
+    .maniobra-entrada { flex-wrap: nowrap; gap: 6px; }
+    .maniobra-entrada > * { flex: none; }
+    .maniobra-entrada input { min-width: 0; padding: 7px 8px; font-size: 15px; }
+    .maniobra-entrada .in-mantisa { flex: 1 1 96px; width: auto; max-width: 110px; }
+    .maniobra-entrada .in-exp { width: 48px; }
+    .maniobra-entrada .por-diez, .maniobra-entrada .unidad { font-size: 14px; }
+    /* los simuladores con instrumentos (vista-instrumentos: K3, G1, X1) se llevan más ancho */
+    .consola-cuerpo:has(.vista-instrumentos) { grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr); }
+    /* con el informe, el ancho es para el informe (el simulador queda de fondo) */
+    .consola-cuerpo.resultado, .consola-cuerpo.resultado:has(.vista-instrumentos) { grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); }
+  }
+  /* móvil pequeño en horizontal: a dos columnas no caben los instrumentos; van a lo ancho, con la orden encima */
+  @media (max-height: 500px) and (max-width: 760px) {
+    .consola-cuerpo:has(.vista-instrumentos), .consola-cuerpo.resultado:has(.vista-instrumentos) { grid-template-columns: 1fr; }
+    .consola-cuerpo:has(.vista-instrumentos) .consola-vista { position: relative; top: auto; }
+    .consola-cuerpo:has(.vista-instrumentos) .consola-lateral { display: contents; }
+    .consola-cuerpo:has(.vista-instrumentos) .consola-lateral > .orden { order: -1; }
   }
   /* móvil: en las consolas con paneles sobre el dibujo (vista-apilada: E3, O1, E2, K1), los paneles van encima y
      debajo y el dibujo ocupa su propia franja; superpuestos se pisaban en una pantalla estrecha */
@@ -4787,7 +4902,9 @@ function crearSimAcoplamiento(cont, p) {
     ctx.restore();
   }
   function camaraProximidad() {
-    const bw = 200, bh = 140, bx = W - bw - 18, by = H - bh - 54;
+    // más pequeña en un simulador pequeño (móvil), para no tapar el planeta
+    const s = Math.max(0.6, Math.min(1, W / 620, H / 480));
+    const bw = 200 * s, bh = 140 * s, bx = W - bw - 18 * s, by = H - bh - 54 * s;
     ctx.save();
     ctx.fillStyle = 'rgba(5,8,17,0.78)'; ctx.fillRect(bx, by, bw, bh);
     ctx.strokeStyle = 'rgba(200,230,255,0.25)'; ctx.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);
@@ -4947,11 +5064,31 @@ function crearSimAcoplamiento(cont, p) {
     .mundo-ficha { font-size: 12px; }
     .mundo-ficha dt, .mundo-ficha dd { padding: 3px 0; }
   }
-  @media (max-width: 860px) {
+  @media (max-width: 860px) and (min-height: 501px) {
     .consola-vista.con-catalogo { min-height: 560px; }
+  }
+  @media (max-width: 860px) {
     .catalogo-escena { inset: 58px 56px 46px; }
     .mundo-carta { width: min(300px, 70%); }
     .carrusel-flecha.izq { left: 6px; } .carrusel-flecha.der { right: 6px; }
+  }
+  /* móvil en horizontal: la carta del mundo, más ancha y más baja, para que quepa entera */
+  @media (max-height: 500px) {
+    .vista-catalogo { top: 10px; left: 12px; }
+    .vista-catalogo .fase { font-size: 11px; letter-spacing: 0.12em; }
+    .catalogo-escena { inset: 44px 50px 28px; }
+    .mundo-carta { width: min(300px, 74%); display: grid; grid-template-columns: 56px minmax(0, 1fr); align-items: center; gap: 5px 12px;
+      padding: 9px 12px 11px; overflow-y: auto; scrollbar-width: none; }
+    .mundo-cab, .mundo-ficha, .btn-fijar { grid-column: 1 / -1; }
+    .consola-vista .mundo-lienzo { width: 56px; aspect-ratio: 1; }
+    .mundo-nombre { font-size: 17px; }
+    .mundo-ficha { font: 11px/1.2 'Share Tech Mono', monospace; }
+    .mundo-ficha dt, .mundo-ficha dd { padding: 2px 0; }
+    .mundo-ficha dt { white-space: nowrap; }
+    .btn-fijar { margin-top: 2px; min-height: 30px; font-size: 11px; }
+    .carrusel-flecha { width: 36px; height: 44px; margin-top: -22px; }
+    .carrusel-flecha.izq { left: 6px; } .carrusel-flecha.der { right: 6px; }
+    .carrusel-pie { bottom: 8px; font-size: 11px; }
   }
 </style>
 <script>
@@ -4985,7 +5122,7 @@ function pantallaDespegue(m) {
         <span class="en-curso">🔒 Misión en curso · no se puede abandonar</span>
       </header>
       <div class="consola-cuerpo">
-        <div class="consola-vista con-catalogo" id="vista">
+        <div class="consola-vista con-catalogo vista-instrumentos" id="vista">
           <div class="esquinas"><span></span></div>
           <div class="vista-hud vista-catalogo" id="hud-catalogo">
             <div class="fase">Catálogo de aterrizaje</div>
@@ -5567,10 +5704,30 @@ function crearSimDespegue(cont, p) {
   .lectura small { font: 10.5px 'Share Tech Mono', monospace; color: rgba(220,235,255,0.4); }
   .datos-exo { display: grid; gap: 2px; margin-top: 8px; }
 
-  @media (max-width: 860px) {
+  @media (max-width: 860px) and (min-height: 501px) {
     .consola-vista.con-observatorio { min-height: 760px; }
     .obs-abajo { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) auto; }
     .obs-lecturas { display: grid; grid-template-columns: 1fr 1fr; }
+  }
+  /* móvil en horizontal: los paneles, lado a lado y con las cabeceras más bajas (también los de O3 y G1) */
+  @media (max-height: 500px) {
+    .observatorio { inset: 8px; grid-template-rows: minmax(0, 1fr); grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 8px; }
+    .obs-cab { gap: 4px 8px; padding: 4px 8px; }
+    .obs-tit { font-size: 10px; letter-spacing: 0.14em; }
+    .obs-ayuda { font-size: 10px; }
+    .obs-botones { flex-wrap: wrap; justify-content: flex-end; }
+    .obs-botones button, .obs-tiempo button { min-width: 26px; height: 22px; padding: 0 6px; font-size: 10px; white-space: nowrap; }
+    .obs-tiempo { gap: 4px; padding: 4px 6px; }
+    .obs-tiempo input[type=range] { min-width: 0; }
+    .obs-lecturas { padding: 4px 8px; }
+    .lectura { padding: 3px 0 4px; }
+    .lectura b, .lectura.grande b { font-size: 13px; }
+    /* K3: el fotómetro con las lecturas debajo y el coronógrafo a todo el alto */
+    .observatorio:has(> .obs-abajo) { grid-template-rows: minmax(0, 1fr) auto; }
+    .obs-abajo { display: contents; }
+    .obs-abajo > .obs-panel:first-child { grid-column: 2; grid-row: 1 / span 2; }
+    .obs-abajo .obs-lecturas { grid-column: 1; grid-row: 2; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 10px; }
+    .obs-abajo .lectura > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   }
 </style>
 <script>
@@ -5600,7 +5757,7 @@ function pantallaExoplaneta(m) {
         <span class="en-curso">🔒 Misión en curso · no se puede abandonar</span>
       </header>
       <div class="consola-cuerpo">
-        <div class="consola-vista con-observatorio" id="vista">
+        <div class="consola-vista con-observatorio vista-instrumentos" id="vista">
           <div class="vista-hud vista-telemetria" id="telemetria" hidden></div>
           <div class="vista-hud vista-fase" id="hud-fase" hidden><div class="fase" id="fase"></div><div class="hud-nombre">${esc(s.estrella)} b</div></div>
           <div class="vista-hud vista-mensaje" id="mensaje"></div>
@@ -6260,9 +6417,15 @@ function crearSimExoplaneta(cont, p) {
   #lienzo-tele { cursor: crosshair; }
   #lienzo-tele.arrastrando { cursor: grabbing; }
   .obs-botones button.activo { background: var(--hud-cian); color: #04121a; border-color: var(--hud-cian); }
-  @media (max-width: 860px) {
+  @media (max-width: 860px) and (min-height: 501px) {
     .consola-vista.con-caja { min-height: 700px; }
     .caja-abajo { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) auto; }
+  }
+  /* móvil en horizontal: la telemetría a la izquierda; la reconstrucción y las lecturas a la derecha */
+  @media (max-height: 500px) {
+    .caja-negra { inset: 8px; grid-template-rows: minmax(0, 1fr); grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 8px; }
+    .caja-abajo { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) auto; gap: 8px; }
+    .caja-abajo .obs-lecturas { display: grid; grid-template-columns: 1fr 1fr; column-gap: 10px; }
   }
 </style>
 <script>
@@ -6895,19 +7058,18 @@ function crearSimCajaNegra(cont, p) {
   .cam-marcar button:hover { background: rgba(255,185,46,0.22); }
   .cam-borrar { width: 100%; height: 26px; margin-top: 6px; border: 1px solid var(--hud-linea-fuerte); background: transparent; color: rgba(220,235,255,0.7); cursor: pointer;
     font: 600 10.5px 'Chakra Petch', sans-serif; letter-spacing: 0.14em; text-transform: uppercase; }
-  @media (max-width: 860px) {
+  @media (max-width: 860px) and (min-height: 501px) {
     .consola-vista.con-camara { min-height: 720px; }
     .camara-orbital { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) auto; }
   }
-  /* teléfono en horizontal: la imagen de la cámara cabe en la pantalla junto con sus controles */
-  /* (la cámara ocupa el alto que deja libre el panel de marcas: en una columna, la caja mide la pantalla más ese
-     panel; en dos columnas, con el panel al lado, lo que mide la pantalla) */
-  @media (max-height: 500px) and (max-width: 860px) {
-    .consola-vista.con-camara { min-height: calc(100vh + 170px); }
-  }
-  @media (max-height: 500px) and (min-width: 861px) {
-    .consola-vista.con-camara { min-height: calc(100vh - 30px); }
-    .consola-cuerpo:has(.con-camara) { align-items: start; }      /* sin estirarse hasta el alto de la columna lateral */
+  /* móvil en horizontal: la cámara y su panel de marcas, más estrecho */
+  @media (max-height: 500px) {
+    .camara-orbital { inset: 8px; grid-template-columns: minmax(0, 1fr) 150px; gap: 8px; }
+    .cam-controles { gap: 4px; padding: 4px 6px; }
+    .cam-controles button { min-width: 26px; height: 24px; padding: 0 5px; }
+    .cam-separador { margin: 2px 2px; }
+    .cam-marcar { grid-template-columns: 1fr; gap: 4px; }
+    .cam-marcar button { height: 26px; }
   }
 </style>
 <script>
@@ -6943,7 +7105,7 @@ function pantallaEstacionaria(m) {
         <span class="en-curso">🔒 Misión en curso · no se puede abandonar</span>
       </header>
       <div class="consola-cuerpo">
-        <div class="consola-vista con-camara" id="vista">
+        <div class="consola-vista con-camara vista-instrumentos" id="vista">
           <div class="vista-hud vista-telemetria" id="telemetria" hidden></div>
           <div class="vista-hud vista-fase" id="hud-fase" hidden><div class="fase" id="fase"></div><div class="hud-nombre">${esc(s.colonia)} · ${esc(s.planeta)}</div></div>
           <div class="vista-hud vista-mensaje" id="mensaje"></div>
@@ -8328,6 +8490,17 @@ function crearSimFactura(cont, p) {
   .ficha-sat .btn-marcar.hecho { background: var(--hud-ambar); color: #1a1100; }
   #lienzo-radar { cursor: pointer; }
   .vista-radar ~ .vista-telemetria { top: 132px; }
+  /* móvil en horizontal: la ficha del satélite, más pequeña, tapa menos radar */
+  @media (max-height: 500px) {
+    .vista-radar { top: 10px; left: 12px; }
+    .vista-radar .fase { font-size: 11px; letter-spacing: 0.12em; }
+    .ficha-sat { left: 8px; bottom: 8px; width: 196px; padding: 6px 8px 8px; }
+    .ficha-sat .pestanas { margin-bottom: 4px; }
+    .ficha-sat .pestanas button { height: 22px; font-size: 10px; }
+    .ficha-sat dl { margin-bottom: 6px; font-size: 11px; }
+    .ficha-sat dt, .ficha-sat dd { padding: 1px 0; }
+    .ficha-sat .btn-marcar { height: 26px; font-size: 10px; }
+  }
 </style>
 <script>
 /* =====================================================================
@@ -8807,6 +8980,18 @@ const PRACTICA = !!window.MODO_PRACTICA;
 if (PRACTICA) document.body.classList.add('practica');
 // autoría (solo en la versión web)
 const CREDITOS = '<a class="enlace-creditos" href="https://elprofedelabata.es/" target="_blank" rel="noopener">El profe de la bata</a>';
+// la versión web se juega con el móvil en horizontal: en vertical, este aviso tapa la app (sin cerrarla ni recargarla)
+if (PRACTICA) document.body.insertAdjacentHTML('beforeend', `<div class="girar">
+  <div class="girar-icono"><svg viewBox="0 0 120 120" aria-hidden="true">
+    <path class="girar-flecha" d="M95 30.4A46 46 0 0 0 24.8 30.4M26 19.6L24.8 30.4L35.2 27.4"/>
+    <g class="girar-movil"><rect x="44" y="28" width="32" height="64" rx="6"/><rect class="pantallita" x="48" y="36" width="24" height="44" rx="2"/><path d="M56 86h8"/></g>
+  </svg></div>
+  <div class="girar-titulo">Gira el móvil</div>
+  <p class="girar-texto">Las misiones se juegan con la pantalla en horizontal.</p>
+  ${CREDITOS}
+</div>`);
+// pantalla en una sola columna (móvil o tablet en vertical); el móvil en horizontal usa dos, como el ordenador
+const UNA_COLUMNA = '(max-width: 860px) and (min-height: 501px)';
 
 function llamar(fn) {
   const args = Array.prototype.slice.call(arguments, 1);
@@ -9341,8 +9526,8 @@ function pantallaPanel() {
   tic();
 
 
-  // manos 3D (solo en pantallas anchas)
-  if (window.matchMedia('(min-width: 861px)').matches) {
+  // manos 3D (solo en pantallas anchas y altas)
+  if (window.matchMedia('(min-width: 861px) and (min-height: 501px)').matches) {
     const tablet = $('#tablet');
     E.manos = crearManosTablet($('#manos-atras'), $('#manos-delante'),
       { traje: (ini.avatar || AVATAR_DEFECTO).traje, casco: (ini.avatar || AVATAR_DEFECTO).casco },
@@ -9458,7 +9643,7 @@ function seleccionar(id, enfocar) {
     if (s) { el.scrollIntoView({ block: 'nearest' }); if (enfocar) el.focus(); }
   });
   pintarFicha();
-  if (window.matchMedia('(max-width: 860px)').matches) $('#ficha').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (window.matchMedia(UNA_COLUMNA).matches) $('#ficha').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function pintarFicha() {

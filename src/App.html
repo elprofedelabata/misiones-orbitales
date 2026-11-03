@@ -21,6 +21,18 @@ const PRACTICA = !!window.MODO_PRACTICA;
 if (PRACTICA) document.body.classList.add('practica');
 // autoría (solo en la versión web)
 const CREDITOS = '<a class="enlace-creditos" href="https://elprofedelabata.es/" target="_blank" rel="noopener">El profe de la bata</a>';
+// la versión web se juega con el móvil en horizontal: en vertical, este aviso tapa la app (sin cerrarla ni recargarla)
+if (PRACTICA) document.body.insertAdjacentHTML('beforeend', `<div class="girar">
+  <div class="girar-icono"><svg viewBox="0 0 120 120" aria-hidden="true">
+    <path class="girar-flecha" d="M95 30.4A46 46 0 0 0 24.8 30.4M26 19.6L24.8 30.4L35.2 27.4"/>
+    <g class="girar-movil"><rect x="44" y="28" width="32" height="64" rx="6"/><rect class="pantallita" x="48" y="36" width="24" height="44" rx="2"/><path d="M56 86h8"/></g>
+  </svg></div>
+  <div class="girar-titulo">Gira el móvil</div>
+  <p class="girar-texto">Las misiones se juegan con la pantalla en horizontal.</p>
+  ${CREDITOS}
+</div>`);
+// pantalla en una sola columna (móvil o tablet en vertical); el móvil en horizontal usa dos, como el ordenador
+const UNA_COLUMNA = '(max-width: 860px) and (min-height: 501px)';
 
 function llamar(fn) {
   const args = Array.prototype.slice.call(arguments, 1);
@@ -555,8 +567,8 @@ function pantallaPanel() {
   tic();
 
 
-  // manos 3D (solo en pantallas anchas)
-  if (window.matchMedia('(min-width: 861px)').matches) {
+  // manos 3D (solo en pantallas anchas y altas)
+  if (window.matchMedia('(min-width: 861px) and (min-height: 501px)').matches) {
     const tablet = $('#tablet');
     E.manos = crearManosTablet($('#manos-atras'), $('#manos-delante'),
       { traje: (ini.avatar || AVATAR_DEFECTO).traje, casco: (ini.avatar || AVATAR_DEFECTO).casco },
@@ -672,7 +684,7 @@ function seleccionar(id, enfocar) {
     if (s) { el.scrollIntoView({ block: 'nearest' }); if (enfocar) el.focus(); }
   });
   pintarFicha();
-  if (window.matchMedia('(max-width: 860px)').matches) $('#ficha').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (window.matchMedia(UNA_COLUMNA).matches) $('#ficha').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function pintarFicha() {

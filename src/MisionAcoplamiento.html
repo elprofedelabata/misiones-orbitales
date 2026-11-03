@@ -382,7 +382,9 @@ function crearSimAcoplamiento(cont, p) {
     ctx.restore();
   }
   function camaraProximidad() {
-    const bw = 200, bh = 140, bx = W - bw - 18, by = H - bh - 54;
+    // más pequeña en un simulador pequeño (móvil), para no tapar el planeta
+    const s = Math.max(0.6, Math.min(1, W / 620, H / 480));
+    const bw = 200 * s, bh = 140 * s, bx = W - bw - 18 * s, by = H - bh - 54 * s;
     ctx.save();
     ctx.fillStyle = 'rgba(5,8,17,0.78)'; ctx.fillRect(bx, by, bw, bh);
     ctx.strokeStyle = 'rgba(200,230,255,0.25)'; ctx.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1);

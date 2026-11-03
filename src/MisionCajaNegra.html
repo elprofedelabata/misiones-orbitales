@@ -8,9 +8,15 @@
   #lienzo-tele { cursor: crosshair; }
   #lienzo-tele.arrastrando { cursor: grabbing; }
   .obs-botones button.activo { background: var(--hud-cian); color: #04121a; border-color: var(--hud-cian); }
-  @media (max-width: 860px) {
+  @media (max-width: 860px) and (min-height: 501px) {
     .consola-vista.con-caja { min-height: 700px; }
     .caja-abajo { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) auto; }
+  }
+  /* móvil en horizontal: la telemetría a la izquierda; la reconstrucción y las lecturas a la derecha */
+  @media (max-height: 500px) {
+    .caja-negra { inset: 8px; grid-template-rows: minmax(0, 1fr); grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 8px; }
+    .caja-abajo { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) auto; gap: 8px; }
+    .caja-abajo .obs-lecturas { display: grid; grid-template-columns: 1fr 1fr; column-gap: 10px; }
   }
 </style>
 <script>
