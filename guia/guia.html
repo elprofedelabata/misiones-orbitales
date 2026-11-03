@@ -77,7 +77,23 @@
   .portada-sub { margin-top: 4mm; font: 600 13pt 'Chakra Petch', sans-serif; letter-spacing: 0.22em; text-transform: uppercase; color: #ffb92e; }
   .portada-meta { margin-top: 2mm; font-size: 11pt; color: rgba(220, 235, 255, 0.75); }
   .portada img { margin-top: auto; width: 100%; border-radius: 6px; border: 1px solid rgba(200, 230, 255, 0.25); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5); }
-  .portada-pie { margin-top: 8mm; font-size: 9pt; color: rgba(220, 235, 255, 0.55); letter-spacing: 0.06em; }
+  .portada-firma { display: flex; align-items: baseline; gap: 3mm; margin-top: 8mm; padding-top: 4mm; border-top: 1px solid rgba(200, 230, 255, 0.2);
+    font: 500 10pt 'Inter', sans-serif; color: rgba(220, 235, 255, 0.7); }
+  .portada-firma b { font: 700 14pt 'Chakra Petch', sans-serif; letter-spacing: 0.12em; text-transform: uppercase; color: #ffb92e; }
+  .portada-firma a { margin-left: auto; color: #3fe0ff; text-decoration: none; letter-spacing: 0.06em; }
+  .portada-pie { margin-top: 2mm; font-size: 9pt; color: rgba(220, 235, 255, 0.55); letter-spacing: 0.06em; }
+
+  /* créditos */
+  .firma { display: flex; align-items: center; gap: 6mm; margin: 2mm 0 7mm; padding: 6mm 7mm; border-radius: 6px;
+    background: radial-gradient(ellipse at 20% 0%, #16244f 0%, #070c1d 70%); color: #f4f7ff; break-inside: avoid; }
+  .firma svg { flex: none; width: 18mm; height: 18mm; }
+  .firma .hex-ext { fill: none; stroke: #3fe0ff; stroke-width: 4; }
+  .firma .hex-nucleo { fill: #ffb92e; }
+  .firma .kicker { display: block; font-size: 8.5pt; letter-spacing: 0.2em; color: rgba(220, 235, 255, 0.65); }
+  .firma b { display: block; margin: 1mm 0; font: 700 20pt 'Chakra Petch', sans-serif; letter-spacing: 0.1em; text-transform: uppercase; color: #ffb92e; }
+  .firma a { color: #3fe0ff; text-decoration: none; letter-spacing: 0.04em; }
+  .licencia { display: inline-block; margin-right: 2mm; padding: 0.5mm 2.5mm; border: 1.5px solid var(--marino); border-radius: 2px;
+    font: 700 8.5pt 'Chakra Petch', sans-serif; letter-spacing: 0.1em; color: var(--marino); }
 
   /* índice */
   .indice { list-style: none; padding: 0; margin: 4mm 0 8mm; }
@@ -100,6 +116,7 @@
   <div class="portada-sub">Guía de instalación y uso para el profesorado</div>
   <div class="portada-meta">Física · 2.º Bachillerato · Campo gravitatorio</div>
   <img src="img/puente-curso.jpg" alt="Puente de mando con la tripulación">
+  <div class="portada-firma"><span>Una actividad de</span><b>El profe de la bata</b><a href="https://elprofedelabata.es/">elprofedelabata.es</a></div>
   <div class="portada-pie">Aplicación web gamificada sobre Google Apps Script · Cuentas del centro (Google Workspace)</div>
 </section>
 
@@ -113,6 +130,7 @@
     <li><span>4</span>El día de clase<small>La campaña paso a paso</small></li>
     <li><span>5</span>Gestión desde la configuración<small>Alumnos, estado, apuntes y nuevas campañas</small></li>
     <li><span>6</span>Problemas frecuentes<small>Y cómo resolverlos</small></li>
+    <li><span>·</span>Créditos y licencia<small>Autoría y condiciones de uso</small></li>
   </ul>
   <div class="caja aviso"><span class="t">Antes de empezar</span>
     <p>Para instalarla necesitas tu cuenta del centro (<b>@g.educaand.es</b>) y que el alumnado use también su cuenta del centro: la app identifica a cada alumno por su correo, y eso solo funciona dentro del mismo dominio.</p>
@@ -315,6 +333,30 @@
 <div class="faq"><b class="q">Quiero que un alumno cambie su astronauta.</b>En la tabla de tripulación, <b>Rediseñar avatar</b>.</div>
 <div class="faq"><b class="q">¿Aparezco yo en la clasificación si pruebo la app de alumnos?</b>No: el profesor nunca sale en el puente, aunque se cree un astronauta para probar.</div>
 <div class="faq"><b class="q">¿Cómo actualizo a una versión nueva de la app?</b>Haz una copia nueva del script original y repite la instalación. Tus campañas anteriores siguen en sus hojas de resultados.</div>
+
+<!-- ============================== CRÉDITOS ============================== -->
+<h1>Créditos y licencia</h1>
+<div class="firma">
+  <svg viewBox="0 0 120 120" aria-hidden="true"><polygon class="hex-ext" points="60,8 105,34 105,86 60,112 15,86 15,34"/><polygon class="hex-nucleo" points="60,42 78,60 60,78 42,60"/></svg>
+  <div><span class="kicker">Una actividad de</span><b>El profe de la bata</b><a href="https://elprofedelabata.es/">elprofedelabata.es</a></div>
+</div>
+<p><b>Misiones orbitales</b> (la aplicación, sus misiones y simuladores, y esta guía) es una creación de <b>El profe de la bata</b>. Puedes encontrar más en <a href="https://elprofedelabata.es/">elprofedelabata.es</a>.</p>
+
+<h2>Licencia</h2>
+<p><span class="licencia">CC BY-NC-SA 4.0</span>Se comparte con licencia <b>Creative Commons Reconocimiento-NoComercial-CompartirIgual 4.0 Internacional</b>. Puedes usarla, copiarla y adaptarla para tus clases siempre que:</p>
+<ul>
+  <li><b>Cites la autoría</b>: «Misiones orbitales, de El profe de la bata (elprofedelabata.es)».</li>
+  <li><b>No la uses con fines comerciales.</b></li>
+  <li><b>Compartas tus adaptaciones con la misma licencia.</b></li>
+</ul>
+<p>Texto completo de la licencia: <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/deed.es">creativecommons.org/licenses/by-nc-sa/4.0/deed.es</a></p>
+
+<h2>Versión para practicar</h2>
+<p>Además de esta versión para clase, hay una <b>versión web para practicar</b> que no necesita instalación ni cuenta: las misiones se pueden repetir con datos nuevos y la partida se guarda en el navegador. Es para practicar, no para evaluar.</p>
+<ul>
+  <li>Versión para practicar: <a href="https://elprofedelabata.github.io/misiones-orbitales/">elprofedelabata.github.io/misiones-orbitales</a></li>
+  <li>Código fuente: <a href="https://github.com/elprofedelabata/misiones-orbitales">github.com/elprofedelabata/misiones-orbitales</a></li>
+</ul>
 
 </body>
 </html>
